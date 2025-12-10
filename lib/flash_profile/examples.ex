@@ -2,13 +2,44 @@ defmodule FlashProfile.Examples do
   @moduledoc """
   Interactive examples demonstrating FlashProfile capabilities.
 
-  Run with:
-      cd flash_profile
-      elixir -r lib/**/*.ex -e "FlashProfile.Examples.run_all()"
+  This module provides 8 comprehensive examples covering:
+
+  1. **Categorical Enumeration** - Status columns with few distinct values
+  2. **Structured Identifiers** - Account codes with prefix enumeration
+  3. **Email Addresses** - Variable-length token patterns
+  4. **Date/Time Patterns** - Fiscal quarters and ISO dates
+  5. **Mixed Formats** - Multiple legitimate formats in one column
+  6. **Anomaly Detection** - Identifying outliers in data
+  7. **Pattern Building API** - Programmatic pattern construction
+  8. **Tokenization** - Understanding string structure analysis
+
+  ## Running Examples
+
+  From the project directory:
+
+      mix run -e "FlashProfile.Examples.run_all()"
+
+  Or run individual examples:
+
+      mix run -e "FlashProfile.Examples.example_categorical()"
+
+  ## Example Output
+
+  Each example prints formatted output showing:
+  - Input data description
+  - Discovered patterns with regex and coverage
+  - Validation results where applicable
   """
 
   alias FlashProfile.{Pattern, Tokenizer}
 
+  @doc """
+  Runs all FlashProfile examples sequentially.
+
+  Demonstrates the library's full capabilities through 8 scenarios.
+  Prints formatted output to stdout.
+  """
+  @spec run_all() :: :ok
   def run_all do
     IO.puts("\n" <> String.duplicate("═", 70))
     IO.puts("  FlashProfile Examples")
@@ -31,6 +62,14 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 1: Categorical Enumeration
   # ============================================================
+
+  @doc """
+  Demonstrates categorical enumeration for status columns.
+
+  Shows how FlashProfile enumerates all distinct values when there are
+  few unique values with high repetition (typical status/state columns).
+  """
+  @spec example_categorical() :: :ok
   def example_categorical do
     header("1. Categorical Enumeration")
 
@@ -56,6 +95,14 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 2: Structured Identifiers with Prefix Enumeration
   # ============================================================
+
+  @doc """
+  Demonstrates hybrid patterns for structured identifiers.
+
+  Shows how FlashProfile enumerates a small set of prefixes while
+  generalizing the numeric suffix - producing patterns like `(ACC|ORG)-\\d{5}`.
+  """
+  @spec example_structured_ids() :: :ok
   def example_structured_ids do
     header("2. Structured Identifiers with Prefix Enumeration")
 
@@ -85,6 +132,14 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 3: Email Addresses
   # ============================================================
+
+  @doc """
+  Demonstrates pattern discovery for email addresses.
+
+  Shows how FlashProfile handles variable-length tokens and
+  produces patterns with character class repetition bounds.
+  """
+  @spec example_emails() :: :ok
   def example_emails do
     header("3. Email Addresses")
 
@@ -121,6 +176,13 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 4: Date/Time Patterns
   # ============================================================
+
+  @doc """
+  Demonstrates pattern discovery for date and time formats.
+
+  Shows handling of fiscal quarters (enumerated) and ISO dates (generalized).
+  """
+  @spec example_dates() :: :ok
   def example_dates do
     header("4. Date/Time Patterns")
 
@@ -152,6 +214,14 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 5: Mixed Formats
   # ============================================================
+
+  @doc """
+  Demonstrates multi-format column handling.
+
+  Shows how FlashProfile discovers multiple patterns when a column
+  contains legitimately different formats (e.g., codes, emails, statuses).
+  """
+  @spec example_mixed_formats() :: :ok
   def example_mixed_formats do
     header("5. Multi-Format Columns")
 
@@ -188,6 +258,14 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 6: Anomaly Detection
   # ============================================================
+
+  @doc """
+  Demonstrates anomaly detection capabilities.
+
+  Shows how FlashProfile identifies values that don't match the
+  dominant patterns, useful for data quality assessment.
+  """
+  @spec example_anomaly_detection() :: :ok
   def example_anomaly_detection do
     header("6. Anomaly Detection")
 
@@ -216,6 +294,14 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 7: Pattern Building API
   # ============================================================
+
+  @doc """
+  Demonstrates the Pattern DSL for programmatic pattern building.
+
+  Shows how to construct patterns using `FlashProfile.Pattern` functions
+  and evaluate their properties (cost, specificity, matching).
+  """
+  @spec example_pattern_building() :: :ok
   def example_pattern_building do
     header("7. Pattern Building API")
 
@@ -267,6 +353,14 @@ defmodule FlashProfile.Examples do
   # ============================================================
   # Example 8: Tokenization Deep Dive
   # ============================================================
+
+  @doc """
+  Demonstrates the tokenization process and signature generation.
+
+  Shows how `FlashProfile.Tokenizer` breaks strings into tokens and
+  generates signatures used for clustering similar structures.
+  """
+  @spec example_tokenization() :: :ok
   def example_tokenization do
     header("8. Tokenization Deep Dive")
 

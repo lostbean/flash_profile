@@ -1,6 +1,8 @@
 defmodule FlashProfile.PatternTest do
   use ExUnit.Case, async: true
 
+  doctest FlashProfile.Pattern
+
   alias FlashProfile.Pattern
 
   describe "Constructors" do

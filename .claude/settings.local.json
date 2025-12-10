@@ -4,7 +4,10 @@
       "Bash(mix compile:*)",
       "Bash(mix format:*)",
       "Bash(mix test:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(mix run:*)",
+      "Bash(ls:*)"
     ]
   },
   "enableAllProjectMcpServers": true

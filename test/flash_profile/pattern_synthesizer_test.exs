@@ -1,6 +1,8 @@
 defmodule FlashProfile.PatternSynthesizerTest do
   use ExUnit.Case, async: true
 
+  doctest FlashProfile.PatternSynthesizer
+
   alias FlashProfile.{Pattern, PatternSynthesizer, Tokenizer}
 
   describe "Token alignment" do

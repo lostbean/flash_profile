@@ -5,6 +5,32 @@ defmodule FlashProfile do
   Given a column of string values, FlashProfile discovers regex patterns that
   accurately describe the structural format of the data.
 
+  ## Algorithm
+
+  This library implements the FlashProfile algorithm from the paper:
+
+  > **FlashProfile: A Framework for Synthesizing Data Profiles**
+  > Saswat Padhi, Prateek Jain, Daniel Perelman, Oleksandr Polozov, Sumit Gulwani, Todd Millstein
+  > OOPSLA 2018
+  > https://doi.org/10.1145/3276520
+
+  The algorithm works in three main phases:
+
+  1. **Tokenization**: Strings are converted into token sequences representing
+     their structural components (digits, letters, punctuation, whitespace, etc.)
+
+  2. **Clustering**: Strings with similar token structures are grouped together.
+     The similarity is computed using edit distance on token sequences, allowing
+     strings like "ACC-001" and "ORG-002" to cluster together.
+
+  3. **Pattern Synthesis**: For each cluster, a regex pattern is synthesized using
+     a cost-based search. The algorithm balances pattern specificity (how precisely
+     it describes the data) against complexity (pattern length and readability).
+
+  The cost function guides the search toward patterns that are both accurate and
+  human-readable, preferring enumerations for small sets of values and generalizations
+  (like `\\d+`) for larger variations.
+
   ## Features
 
   - **Automatic clustering**: Groups strings by structural similarity
@@ -30,9 +56,14 @@ defmodule FlashProfile do
   ## Options
 
   - `:max_clusters` - Maximum number of pattern clusters (default: 5)
-  - `:min_coverage` - Minimum coverage for a pattern to be included (default: 0.01)
-  - `:enum_threshold` - Max distinct values before generalizing (default: 10)
-  - `:detect_anomalies` - Whether to identify anomalies (default: true)
+  - `:min_coverage` - Minimum coverage for a pattern to be included (default: 0.01).
+    Patterns below this threshold become anomalies if `detect_anomalies` is true.
+  - `:enum_threshold` - Max distinct values before generalizing (default: 10).
+    Values ≤5 are always enumerated; values > threshold are always generalized.
+  - `:detect_anomalies` - Whether to identify anomalies (default: true).
+    Anomalies are values that don't match any pattern meeting min_coverage.
+  - `:length_tolerance` - Reserved for future use (default: 0.2).
+    Intended for allowing length variation in pattern synthesis.
   """
 
   alias FlashProfile.{Clustering, PatternSynthesizer, Pattern}
@@ -82,10 +113,11 @@ defmodule FlashProfile do
       iex> {:ok, profile} = FlashProfile.profile(["active", "pending", "completed"])
       iex> hd(profile.patterns).regex
       "(active|completed|pending)"
-      
-      iex> {:ok, profile} = FlashProfile.profile(["ACC-001", "ACC-002", "ORG-123"])
+
+      iex> data = for p <- ["ACC", "ORG"], n <- 1..10, do: p <> "-" <> String.pad_leading(to_string(n), 3, "0")
+      iex> {:ok, profile} = FlashProfile.profile(data)
       iex> hd(profile.patterns).regex
-      "(ACC|ORG)-\\\\d{3}"
+      "(ACC|ORG)\\\\-\\\\d{3}"
   """
   @spec profile([String.t()], keyword()) :: {:ok, profile()} | {:error, term()}
   def profile(strings, opts \\ []) do

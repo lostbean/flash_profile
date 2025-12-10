@@ -30,7 +30,14 @@ defmodule FlashProfile.Token do
 
   @doc """
   Creates a new token.
+
+  ## Examples
+
+      iex> token = FlashProfile.Token.new(:digits, "123", 5)
+      iex> {token.type, token.value, token.length, token.position}
+      {:digits, "123", 3, 5}
   """
+  @spec new(token_type(), String.t(), non_neg_integer()) :: t()
   def new(type, value, position \\ 0) do
     %__MODULE__{
       type: type,
@@ -42,8 +49,18 @@ defmodule FlashProfile.Token do
 
   @doc """
   Returns a signature character for the token type.
-  Used for structural comparison.
+
+  Used for structural comparison. Maps token types to single characters:
+  - `:digits` → `"D"`
+  - `:upper` → `"U"`
+  - `:lower` → `"L"`
+  - `:alpha` → `"A"`
+  - `:alnum` → `"X"`
+  - `:whitespace` → `"_"`
+  - `:delimiter` → the delimiter character itself
+  - `:literal` → the literal value itself
   """
+  @spec signature_char(t()) :: String.t()
   def signature_char(%__MODULE__{type: :digits}), do: "D"
   def signature_char(%__MODULE__{type: :upper}), do: "U"
   def signature_char(%__MODULE__{type: :lower}), do: "L"
@@ -55,8 +72,13 @@ defmodule FlashProfile.Token do
 
   @doc """
   Returns a length-aware signature for the token.
-  E.g., 3 uppercase letters → "UUU" or "U{3}"
+
+  For character class tokens, repeats the signature character by length.
+  For example, 3 uppercase letters → `"UUU"`.
+
+  Delimiter and literal tokens return their actual value regardless of length.
   """
+  @spec signature(t()) :: String.t()
   def signature(%__MODULE__{type: type, length: len} = token) when len > 1 do
     char = signature_char(token)
 

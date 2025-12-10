@@ -1,6 +1,8 @@
 defmodule FlashProfile.TokenTest do
   use ExUnit.Case, async: true
 
+  doctest FlashProfile.Token
+
   alias FlashProfile.Token
 
   describe "Token creation" do

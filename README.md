@@ -32,12 +32,16 @@ end
 ## Quick Start
 
 ```elixir
-# Basic profiling
-{:ok, profile} = FlashProfile.profile(["ACC-001", "ACC-002", "ORG-003", "ORG-004"])
-
-# View the discovered pattern
+# Basic profiling with categorical data - enumerates exact values
+{:ok, profile} = FlashProfile.profile(["active", "pending", "completed", "cancelled"])
 IO.puts(hd(profile.patterns).regex)
-# => "(ACC|ORG)-\d{3}"
+# => "(active|cancelled|completed|pending)"
+
+# Profiling structured data with many values - generalizes
+data = for prefix <- ["ACC", "ORG"], n <- 1..50, do: "#{prefix}-#{String.pad_leading(to_string(n), 3, "0")}"
+{:ok, profile} = FlashProfile.profile(data)
+IO.puts(hd(profile.patterns).regex)
+# => "(ACC|ORG)\-\d{3}"
 
 # Validate new values against the profile
 FlashProfile.validate(profile, "ACC-999")  # => :ok
@@ -93,47 +97,50 @@ IO.puts(hd(profile.patterns).regex)
 ### Structured Identifiers with Prefix Enumeration
 
 ```elixir
-# Account references with known prefixes
-data = [
-  "ACC-00043", "ORG-00131", "ACCT-00055", "ACME-00107",
-  "ACC-00044", "ORG-00132", "ACCT-00056", "ACME-00108"
-]
+# Account references with known prefixes - need enough data to trigger generalization
+data = for prefix <- ["ACC", "ORG", "ACCT", "ACME"], n <- 1..20 do
+  "#{prefix}-#{String.pad_leading(to_string(n), 5, "0")}"
+end
 
 {:ok, profile} = FlashProfile.profile(data)
 IO.puts(hd(profile.patterns).regex)
-# => "(ACC|ACCT|ACME|ORG)-\d{5}"
+# => "(ACC|ACCT|ACME|ORG)\-\d{5}"
 ```
 
 ### Email Addresses
 
 ```elixir
-data = ["alice.jones@company.org", "bob@test.io", "admin@company.org"]
+# Generate enough emails to trigger generalization
+data = for user <- ["alice", "bob", "carol", "david", "eve", "frank", "grace", "henry", "ivy", "jack"],
+         domain <- ["company.org", "test.io", "example.com"], do: "#{user}@#{domain}"
 
 {:ok, profile} = FlashProfile.profile(data)
 IO.puts(hd(profile.patterns).regex)
-# => "[a-z]+(\.[a-z]+)?@[a-z]+\.[a-z]+"
+# => "[a-z]{3,5}@(company|example|test)\.(com|io|org)"
 ```
 
 ### Date/Time Patterns
 
 ```elixir
-data = ["2024-Q1", "2024-Q2", "2024-Q3", "2024-Q4", "2025-Q1"]
+# Fiscal quarters across multiple years
+data = for year <- 2020..2025, q <- ["Q1", "Q2", "Q3", "Q4"], do: "#{year}-#{q}"
 
 {:ok, profile} = FlashProfile.profile(data)
 IO.puts(hd(profile.patterns).regex)
-# => "\d{4}-(Q1|Q2|Q3|Q4)"
+# => "\d{4}\-Q(1|2|3|4)"
 ```
 
 ### Anomaly Detection
 
 ```elixir
-# 99% normal data + 1% anomalies
-data = (for i <- 1..99, do: "ID-#{String.pad_leading(to_string(i), 3, "0")}") ++
-       ["TOTALLY_DIFFERENT", "weird_value"]
+# 95% normal data + 5% anomalies
+# Use min_coverage to filter out low-coverage patterns (they become anomalies)
+data = (for i <- 1..95, do: "ID-#{String.pad_leading(to_string(i), 4, "0")}") ++
+       ["TOTALLY_DIFFERENT", "weird_value", "not-matching", "???", "123"]
 
-{:ok, profile} = FlashProfile.profile(data)
+{:ok, profile} = FlashProfile.profile(data, min_coverage: 0.05)
 IO.inspect(profile.anomalies)
-# => ["TOTALLY_DIFFERENT", "weird_value"]
+# => ["TOTALLY_DIFFERENT", "weird_value", "not-matching", "???", "123"]
 ```
 
 ## API Reference
@@ -169,8 +176,9 @@ Quick function to get a regex for a list of strings.
 ```elixir
 @spec infer_regex([String.t()], keyword()) :: String.t()
 
+# With small sets, values are enumerated for precision
 regex = FlashProfile.infer_regex(["A-1", "B-2", "C-3"])
-# => "(A|B|C)-\d"
+# => "(A|B|C)\\-(1|2|3)"
 ```
 
 #### `FlashProfile.anomalies/1`
@@ -197,13 +205,13 @@ p = Pattern.seq([
 
 # Convert to regex
 Pattern.to_regex(p)
-# => "(ACC|ORG)-\d{3,5}"
+# => "(ACC|ORG)\\-\\d{3,5}"
 
 # Check if a pattern matches
 Pattern.matches?(p, "ACC-1234")  # => true
 
 # Get pattern cost (lower is better)
-Pattern.cost(p)  # => 4.7
+Pattern.cost(p)  # => 4.2
 
 # Human-readable representation
 Pattern.pretty(p)
@@ -219,9 +227,8 @@ alias FlashProfile.Tokenizer
 
 # Tokenize a string
 tokens = Tokenizer.tokenize("ACC-00123")
-# => [%Token{type: :upper, value: "ACC"},
-#     %Token{type: :delimiter, value: "-"},
-#     %Token{type: :digits, value: "00123"}]
+Enum.map(tokens, fn t -> {t.type, t.value} end)
+# => [{:upper, "ACC"}, {:delimiter, "-"}, {:digits, "00123"}]
 
 # Get structural signature
 Tokenizer.signature("ACC-00123")

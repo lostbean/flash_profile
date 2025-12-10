@@ -67,13 +67,13 @@ defmodule FlashProfile.Pattern do
 
   ## Examples
 
-      iex> Pattern.to_regex({:literal, "hello"})
+      iex> FlashProfile.Pattern.to_regex({:literal, "hello"})
       "hello"
-      
-      iex> Pattern.to_regex({:char_class, :digit, 3, 3})
+
+      iex> FlashProfile.Pattern.to_regex({:char_class, :digit, 3, 3})
       "\\\\d{3}"
-      
-      iex> Pattern.to_regex({:enum, ["ACC", "ORG"]})
+
+      iex> FlashProfile.Pattern.to_regex({:enum, ["ACC", "ORG"]})
       "(ACC|ORG)"
   """
   @spec to_regex(t()) :: String.t()

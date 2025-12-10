@@ -33,8 +33,14 @@ defmodule FlashProfile.PatternSynthesizer do
 
   ## Examples
 
-      iex> PatternSynthesizer.synthesize(["ACC-001", "ACC-002", "ORG-001"])
-      {:seq, [{:enum, ["ACC", "ORG"]}, {:literal, "-"}, {:char_class, :digit, 3, 3}]}
+      iex> pattern = FlashProfile.PatternSynthesizer.synthesize(["A", "B", "C"])
+      iex> FlashProfile.Pattern.to_regex(pattern)
+      "(A|B|C)"
+
+      iex> data = for p <- ["ACC", "ORG"], n <- 1..10, do: p <> "-" <> String.pad_leading(to_string(n), 3, "0")
+      iex> pattern = FlashProfile.PatternSynthesizer.synthesize(data)
+      iex> FlashProfile.Pattern.to_regex(pattern)
+      "(ACC|ORG)\\\\-\\\\d{3}"
   """
   @spec synthesize([String.t()], synthesis_opts()) :: Pattern.t()
   def synthesize(strings, opts \\ []) when is_list(strings) and length(strings) > 0 do

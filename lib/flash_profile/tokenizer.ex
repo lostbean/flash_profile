@@ -29,10 +29,9 @@ defmodule FlashProfile.Tokenizer do
 
   ## Examples
 
-      iex> Tokenizer.tokenize("ABC-123")
-      [%Token{type: :upper, value: "ABC", length: 3},
-       %Token{type: :delimiter, value: "-", length: 1},
-       %Token{type: :digits, value: "123", length: 3}]
+      iex> tokens = FlashProfile.Tokenizer.tokenize("ABC-123")
+      iex> Enum.map(tokens, fn t -> {t.type, t.value} end)
+      [{:upper, "ABC"}, {:delimiter, "-"}, {:digits, "123"}]
   """
   @spec tokenize(String.t(), tokenize_opts()) :: [Token.t()]
   def tokenize(string, opts \\ []) when is_binary(string) do
@@ -122,10 +121,10 @@ defmodule FlashProfile.Tokenizer do
 
   ## Examples
 
-      iex> Tokenizer.signature("ACC-00123")
+      iex> FlashProfile.Tokenizer.signature("ACC-00123")
       "UUU-DDDDD"
-      
-      iex> Tokenizer.signature("hello@world.com")
+
+      iex> FlashProfile.Tokenizer.signature("hello@world.com")
       "LLLLL@LLLLL.LLL"
   """
   @spec signature(String.t() | [Token.t()]) :: String.t()
@@ -144,10 +143,10 @@ defmodule FlashProfile.Tokenizer do
 
   ## Examples
 
-      iex> Tokenizer.compact_signature("ACC-00123")
+      iex> FlashProfile.Tokenizer.compact_signature("ACC-00123")
       "U-D"
-      
-      iex> Tokenizer.compact_signature("ACCT-00123")
+
+      iex> FlashProfile.Tokenizer.compact_signature("ACCT-00123")
       "U-D"
   """
   @spec compact_signature(String.t() | [Token.t()]) :: String.t()

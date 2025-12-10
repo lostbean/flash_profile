@@ -1,6 +1,8 @@
 defmodule FlashProfile.TokenizerTest do
   use ExUnit.Case, async: true
 
+  doctest FlashProfile.Tokenizer
+
   alias FlashProfile.Tokenizer
 
   describe "Basic tokenization" do

@@ -1,6 +1,8 @@
 defmodule FlashProfile.ClusteringTest do
   use ExUnit.Case, async: true
 
+  doctest FlashProfile.Clustering
+
   alias FlashProfile.Clustering
 
   describe "Initial clustering" do

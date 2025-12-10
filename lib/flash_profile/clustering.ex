@@ -36,12 +36,15 @@ defmodule FlashProfile.Clustering do
 
   ## Examples
 
-      iex> Clustering.cluster(["ACC-001", "ACC-002", "ORG-001", "ORG-002"])
-      [%{members: ["ACC-001", "ACC-002", "ORG-001", "ORG-002"], ...}]
-      
-      iex> Clustering.cluster(["hello@world.com", "foo@bar.org", "ABC-123"])
-      [%{members: ["hello@world.com", "foo@bar.org"], ...},
-       %{members: ["ABC-123"], ...}]
+      iex> clusters = FlashProfile.Clustering.cluster(["ACC-001", "ACC-002", "ORG-001", "ORG-002"])
+      iex> length(clusters)
+      1
+      iex> hd(clusters).members |> Enum.sort()
+      ["ACC-001", "ACC-002", "ORG-001", "ORG-002"]
+
+      iex> clusters = FlashProfile.Clustering.cluster(["hello@world.com", "foo@bar.org", "ABC-123"])
+      iex> length(clusters)
+      2
   """
   @spec cluster([String.t()], keyword()) :: [cluster()]
   def cluster(strings, opts \\ []) do

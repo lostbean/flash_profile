@@ -1,6 +1,8 @@
 defmodule FlashProfile.ApiTest do
   use ExUnit.Case, async: true
 
+  doctest FlashProfile
+
   alias FlashProfile
 
   # ==================== FLASHPROFILE API ====================
