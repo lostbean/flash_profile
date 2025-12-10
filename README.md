@@ -314,6 +314,30 @@ FlashProfile.profile(data, max_clusters: 1)
 | Cost-optimized           | ✓            | ✗            | ✗            |
 | No training needed       | ✓            | ✓            | ✓            |
 
+## Development
+
+### Mix Commands
+
+```bash
+# Run before committing: format, compile with warnings-as-errors, test
+mix precommit
+
+# Run in CI: format, compile with warnings-as-errors, test, dialyzer
+mix ci
+```
+
+### Running Tests
+
+```bash
+mix test
+```
+
+### Static Analysis
+
+```bash
+mix dialyzer
+```
+
 ## References
 
 - [FlashProfile Paper](https://www.microsoft.com/en-us/research/publication/flashprofile-interactive-synthesis-of-syntactic-profiles/) -

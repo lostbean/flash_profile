@@ -8,6 +8,11 @@ defmodule FlashProfile.MixProject do
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      aliases: aliases(),
+      preferred_cli_env: [
+        precommit: :test,
+        ci: :test
+      ],
       name: "FlashProfile",
       description: "Automatic regex pattern discovery for string columns",
       source_url: "https://github.com/lostbean/flash_profile",
@@ -21,6 +26,22 @@ defmodule FlashProfile.MixProject do
   def application do
     [
       extra_applications: [:logger]
+    ]
+  end
+
+  defp aliases do
+    [
+      precommit: [
+        "format",
+        "compile --warnings-as-errors",
+        "test"
+      ],
+      ci: [
+        "format",
+        "compile --warnings-as-errors",
+        "test",
+        "dialyzer"
+      ]
     ]
   end
 
