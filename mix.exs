@@ -37,10 +37,9 @@ defmodule FlashProfile.MixProject do
         "test"
       ],
       ci: [
-        "format",
+        "format --check-formatted",
         "compile --warnings-as-errors",
-        "test",
-        "dialyzer"
+        "test"
       ]
     ]
   end

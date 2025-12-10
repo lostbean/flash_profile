@@ -6,7 +6,7 @@ on:
     branches: [main]
 jobs:
   test:
-    name: Test
+    name: Test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -37,5 +37,32 @@ jobs:
           restore-keys: ${{ runner.os }}-mix-
       - name: Install dependencies
         run: mix deps.get
-      - name: Run precommit checks
-        run: mix precommit
+      - name: Run CI checks
+        run: mix ci
+  dialyzer:
+    name: Dialyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19'
+          otp-version: '28'
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Restore PLT cache
+        id: plt-cache
+        uses: actions/cache@v4
+        with:
+          path: _build/test/dialyxir_*.plt*
+          key: plt-${{ runner.os }}-otp28-elixir1.19-${{ hashFiles('**/mix.lock') }}
+          restore-keys: plt-${{ runner.os }}-otp28-elixir1.19-
+      - name: Install dependencies
+        run: mix deps.get
+      - name: Run Dialyzer
+        run: mix dialyzer
