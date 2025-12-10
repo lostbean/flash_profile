@@ -215,21 +215,8 @@ defmodule FlashProfile.PatternSynthesizer do
     end
   end
 
-  defp length_bounds(lengths, tolerance) do
-    min_len = Enum.min(lengths)
-    max_len = Enum.max(lengths)
-
-    if max_len - min_len <= max_len * tolerance do
-      # Lengths are similar enough - use fixed length if identical
-      if min_len == max_len do
-        {min_len, max_len}
-      else
-        {min_len, max_len}
-      end
-    else
-      # Significant variation - use range
-      {min_len, max_len}
-    end
+  defp length_bounds(lengths, _tolerance) do
+    {Enum.min(lengths), Enum.max(lengths)}
   end
 
   defp token_type_to_char_class(:digits), do: :digit

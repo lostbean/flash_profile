@@ -3,7 +3,8 @@
     "allow": [
       "Bash(mix compile:*)",
       "Bash(mix format:*)",
-      "Bash(mix test:*)"
+      "Bash(mix test:*)",
+      "Bash(find:*)"
     ]
   },
   "enableAllProjectMcpServers": true

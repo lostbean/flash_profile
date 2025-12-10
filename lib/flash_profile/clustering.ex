@@ -232,13 +232,15 @@ defmodule FlashProfile.Clustering do
     end)
   end
 
+  defp find_representative([single]), do: single
+
   defp find_representative(members) do
     # Choose the most "typical" member - closest to median length
     lengths = Enum.map(members, &String.length/1)
-    median_length = Enum.at(Enum.sort(lengths), div(length(lengths), 2))
+    sorted_lengths = Enum.sort(lengths)
+    median_length = Enum.at(sorted_lengths, div(length(sorted_lengths), 2))
 
-    members
-    |> Enum.min_by(fn m -> abs(String.length(m) - median_length) end)
+    Enum.min_by(members, fn m -> abs(String.length(m) - median_length) end)
   end
 
   @doc """

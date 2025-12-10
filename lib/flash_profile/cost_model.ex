@@ -229,13 +229,8 @@ defmodule FlashProfile.CostModel do
   """
   @spec suggest_enum_threshold([String.t()]) :: pos_integer()
   def suggest_enum_threshold(values) do
-    distinct = Enum.uniq(values)
-    distinct_count = length(distinct)
+    distinct_count = values |> Enum.uniq() |> length()
     total_count = length(values)
-
-    # Calculate frequency distribution
-    freq = Enum.frequencies(values)
-    _max_freq = freq |> Map.values() |> Enum.max(fn -> 1 end)
     avg_freq = total_count / max(distinct_count, 1)
 
     cond do

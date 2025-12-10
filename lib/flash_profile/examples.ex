@@ -7,7 +7,6 @@ defmodule FlashProfile.Examples do
       elixir -r lib/**/*.ex -e "FlashProfile.Examples.run_all()"
   """
 
-  alias FlashProfile
   alias FlashProfile.{Pattern, Tokenizer}
 
   def run_all do

@@ -47,6 +47,7 @@ defmodule FlashProfile do
   @type pattern_info :: %{
           pattern: Pattern.t(),
           regex: String.t(),
+          compiled_regex: Regex.t(),
           coverage: float(),
           matched_count: non_neg_integer(),
           members: [String.t()]
@@ -177,14 +178,15 @@ defmodule FlashProfile do
   defp build_pattern_info(pattern, members, all_strings) do
     regex_str = Pattern.to_regex(pattern)
     full_regex_str = "^" <> regex_str <> "$"
-    {:ok, regex} = Regex.compile(full_regex_str)
+    {:ok, compiled_regex} = Regex.compile(full_regex_str)
 
-    matched = Enum.filter(all_strings, &Regex.match?(regex, &1))
+    matched = Enum.filter(all_strings, &Regex.match?(compiled_regex, &1))
     coverage = length(matched) / length(all_strings)
 
     %{
       pattern: pattern,
       regex: regex_str,
+      compiled_regex: compiled_regex,
       pretty: Pattern.pretty(pattern),
       coverage: coverage,
       matched_count: length(matched),
@@ -211,14 +213,10 @@ defmodule FlashProfile do
   end
 
   defp find_anomalies(strings, pattern_infos) do
-    regexes =
-      Enum.map(pattern_infos, fn info ->
-        {:ok, regex} = Regex.compile("^" <> info.regex <> "$")
-        regex
-      end)
+    compiled_regexes = Enum.map(pattern_infos, & &1.compiled_regex)
 
     Enum.filter(strings, fn string ->
-      not Enum.any?(regexes, &Regex.match?(&1, string))
+      not Enum.any?(compiled_regexes, &Regex.match?(&1, string))
     end)
   end
 
@@ -246,11 +244,7 @@ defmodule FlashProfile do
   """
   @spec validate(profile(), String.t()) :: :ok | {:error, :no_match}
   def validate(%{patterns: pattern_infos}, value) do
-    matched =
-      Enum.any?(pattern_infos, fn info ->
-        {:ok, regex} = Regex.compile("^" <> info.regex <> "$")
-        Regex.match?(regex, value)
-      end)
+    matched = Enum.any?(pattern_infos, &Regex.match?(&1.compiled_regex, value))
 
     if matched, do: :ok, else: {:error, :no_match}
   end

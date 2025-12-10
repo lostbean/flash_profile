@@ -202,14 +202,21 @@ defmodule FlashProfile.Pattern do
 
   @doc """
   Checks if a pattern matches a string.
+
+  Returns `false` and logs a warning if the pattern cannot be compiled to a valid regex.
   """
   @spec matches?(t(), String.t()) :: boolean()
   def matches?(pattern, string) do
     regex_str = "^" <> to_regex(pattern) <> "$"
 
     case Regex.compile(regex_str) do
-      {:ok, regex} -> Regex.match?(regex, string)
-      _ -> false
+      {:ok, regex} ->
+        Regex.match?(regex, string)
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("Pattern compilation failed: #{inspect(reason)} for regex: #{regex_str}")
+        false
     end
   end
 
