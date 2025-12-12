@@ -6,6 +6,19 @@ defmodule FlashProfile.Atoms.Defaults do
   standard collection of atoms used in pattern learning. The atoms are organized
   by type and can be accessed individually or as categorized groups.
 
+  ## Paper Atoms (Figure 6)
+
+  The following atoms are defined in the paper:
+  - Lower, Upper, Digit, Bin, Hex, Alpha, AlphaDigit, Space, DotDash,
+  - Punct, AlphaDash, Symb, Base64, Any
+
+  ## Extensions (not in paper)
+
+  This implementation includes additional atoms beyond Figure 6:
+  - **AlphaDigitSpace**: [a-zA-Z0-9\\s] - alphanumeric with whitespace
+  - **AlphaSpace**: [a-zA-Z\\s] - alphabetic with whitespace
+  - **TitleCaseWord**: [A-Z][a-z]+ - title case words (regex-based)
+
   ## Default Atoms
 
   The following atoms are included:
@@ -19,17 +32,17 @@ defmodule FlashProfile.Atoms.Defaults do
   - Alpha: alphabetic characters [a-zA-Z]
   - AlphaDigit: alphanumeric [a-zA-Z0-9]
   - Space: whitespace characters
-  - AlphaDigitSpace: alphanumeric and whitespace
+  - AlphaDigitSpace: alphanumeric and whitespace (extension)
   - DotDash: dot and dash [.-]
   - Punct: common punctuation [.,:?/-]
   - AlphaDash: alphabetic and dash [a-zA-Z-]
   - Symb: symbol characters
-  - AlphaSpace: alphabetic and whitespace
+  - AlphaSpace: alphabetic and whitespace (extension)
   - Base64: Base64 characters [a-zA-Z0-9+=]
   - Any: any printable character
 
   ### Regex Patterns
-  - TitleCaseWord: uppercase letter followed by lowercase letters
+  - TitleCaseWord: uppercase letter followed by lowercase letters (extension)
 
   ## Examples
 

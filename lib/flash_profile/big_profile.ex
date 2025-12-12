@@ -50,6 +50,7 @@ defmodule FlashProfile.BigProfile do
       true
 
       iex> # Sample random strings
+      iex> alias FlashProfile.BigProfile
       iex> strings = ["a", "b", "c", "d", "e"]
       iex> sample = BigProfile.sample_random(strings, 3)
       iex> length(sample)
@@ -124,8 +125,7 @@ defmodule FlashProfile.BigProfile do
 
     # If dataset is small enough, use Profile directly instead of BigProfile
     if length(strings) <= sample_size do
-      # For small datasets, just use regular profiling
-      # Since Profile module is not implemented yet, we'll do basic learning
+      # For small datasets, use the full Profile algorithm directly
       profile_small_dataset(strings, config)
     else
       # Run BigProfile iteration
@@ -297,33 +297,22 @@ defmodule FlashProfile.BigProfile do
   end
 
   # Profile a small dataset directly (when dataset size <= sample size)
-  # This is a simplified version that learns one pattern per unique string cluster
+  # Delegates to profile_sample which uses the full Profile algorithm
   defp profile_small_dataset(strings, config) do
-    # For small datasets, we can cluster and learn patterns
-    # Since Profile module is not implemented, we'll do basic learning
+    # For small datasets, we can use the full Profile algorithm directly
     profile_sample(strings, config)
   end
 
-  # Profile a sample of strings
-  # This is a simplified implementation since Profile module is not yet available
+  # Profile a sample of strings using the full Profile algorithm
+  # This implements the call to Profile(X, m, M, θ) from Figure 12, Step 4
   defp profile_sample(strings, config) do
+    min_patterns = config[:min_patterns] || 1
+    max_patterns = config[:max_patterns] || 10
+    theta = config[:theta] || 1.25
     atoms = config[:atoms] || Defaults.all()
-    _min_patterns = config[:min_patterns]
-    _max_patterns = config[:max_patterns]
 
-    # Simple approach: learn one pattern for all strings
-    # In full implementation, this would use Profile(X, m, M, θ)
-    # which includes clustering and learning patterns for each cluster
-
-    case Learner.learn_best_pattern(strings, atoms) do
-      {:error, :no_pattern} ->
-        # No pattern found, create entry with no pattern
-        [ProfileEntry.new(strings, nil, :infinity)]
-
-      {pattern, cost} ->
-        # Pattern found, create entry
-        [ProfileEntry.new(strings, pattern, cost)]
-    end
+    # Call the full Profile algorithm with clustering
+    FlashProfile.Profile.profile(strings, min_patterns, max_patterns, theta: theta, atoms: atoms)
   end
 
   # Merge two profiles and compress to max_patterns

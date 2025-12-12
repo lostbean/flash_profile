@@ -17,7 +17,8 @@ defmodule FlashProfile.Learner do
   1. **Get Compatible Atoms**: Find all atoms that can match a non-empty prefix
      of ALL strings in the dataset. Enrich with:
      - Fixed-width variants where match lengths are consistent
-     - Constant atoms from longest common prefix
+     - Constant atoms from longest common prefix (LCP)
+     - Constant atoms from common delimiter characters
 
   2. **Recursive Pattern Building**: For each compatible atom:
      - Match it against all strings to get remaining suffixes
@@ -26,6 +27,18 @@ defmodule FlashProfile.Learner do
 
   3. **Cost-Based Selection**: Among all valid patterns, select the one
      with minimum cost using the FlashProfile cost function.
+
+  ## Constant Atom Enrichment
+
+  This implementation extends the paper's constant enrichment strategy beyond
+  just the LCP. While the paper suggests `{Const_s | s ∈ S}` (constants from
+  input strings), we use a practical heuristic that adds constants for:
+  - All prefixes of the longest common prefix (original approach)
+  - Common single-character delimiters that appear in all strings (e.g., "-", "@", ".")
+
+  This enhancement helps the learner discover delimiters and separators that are
+  crucial for structured data patterns (dates, phone numbers, emails, etc.) without
+  the exponential cost of generating all substrings.
 
   ## Performance Considerations
 
@@ -147,6 +160,9 @@ defmodule FlashProfile.Learner do
       # All strings are empty - return empty pattern
       [[]]
     else
+      # Clear any existing pattern cache before learning
+      clear_pattern_cache()
+
       # Start recursive pattern learning with depth tracking
       learn_patterns_recursive(strings, atoms, 0, %{})
     end
@@ -160,7 +176,23 @@ defmodule FlashProfile.Learner do
   - Fixed-width variants where match lengths are consistent across all strings
   - Constant atoms from longest common prefix
 
-  This implements the GetMaxCompatibleAtoms algorithm from Figure 15 of the paper.
+  Implements the GetMaxCompatibleAtoms algorithm from Figure 15 of the paper.
+
+  ## Implementation Notes
+
+  The implementation achieves the same result as Figure 15 but uses a different
+  algorithmic approach:
+  - **Paper**: Iteratively removes incompatible atoms per-string
+  - **Implementation**: Filters atoms that match ALL strings in one pass
+
+  This is functionally equivalent but may have different performance characteristics
+  for very large datasets.
+
+  ## Enrichment
+
+  Per Equation (1) in the paper, atoms are enriched with:
+  - Constant atoms from longest common prefix (and common characters)
+  - Fixed-width variants of character class atoms where width is consistent
 
   ## Parameters
 
@@ -206,34 +238,79 @@ defmodule FlashProfile.Learner do
     # Add constant atoms from longest common prefix
     lcp = longest_common_prefix(strings)
 
-    constant_atoms =
+    lcp_atoms =
       if String.length(lcp) > 0 do
         Constant.all_prefixes(lcp)
       else
         []
       end
 
+    # Add constant atoms from common delimiter characters
+    # Find single characters that appear in all strings (common delimiters)
+    delimiter_atoms = find_common_delimiter_atoms(strings)
+
     # Combine all atoms and remove duplicates
     # Use a more robust deduplication based on atom characteristics
-    (compatible ++ fixed_width_atoms ++ constant_atoms)
+    (compatible ++ fixed_width_atoms ++ lcp_atoms ++ delimiter_atoms)
     |> Enum.uniq_by(&atom_signature/1)
   end
 
   ## Private Functions
 
+  # Find common single-character delimiters that appear in all strings
+  # Returns a list of constant atoms for characters that appear in every string
+  # Focuses on common delimiter characters to avoid creating too many constants
+  defp find_common_delimiter_atoms([]), do: []
+  defp find_common_delimiter_atoms([_single]), do: []
+
+  defp find_common_delimiter_atoms(strings) do
+    # Common delimiter characters to check (punctuation and symbols)
+    # These are commonly used in structured data: dates, phone numbers, emails, etc.
+    delimiter_chars = [
+      "-",
+      ".",
+      "/",
+      "@",
+      ":",
+      "_",
+      ",",
+      ";",
+      " ",
+      "#",
+      "&",
+      "*",
+      "+",
+      "=",
+      "~",
+      "|"
+    ]
+
+    # Find delimiters that appear in all strings
+    common_delimiters =
+      delimiter_chars
+      |> Enum.filter(fn char ->
+        Enum.all?(strings, fn s -> String.contains?(s, char) end)
+      end)
+
+    # Create constant atoms for common delimiters
+    Enum.map(common_delimiters, &Constant.new/1)
+  end
+
   # Recursively learn patterns with depth tracking and limits
-  defp learn_patterns_recursive(strings, atoms, depth, memo_cache) do
+  defp learn_patterns_recursive(strings, atoms, depth, _memo_cache) do
     # Check depth limit to prevent infinite recursion
     if depth >= @max_pattern_length do
       []
     else
-      # Create cache key for memoization
-      cache_key = {strings, depth}
+      # Create cache key for memoization using Process dictionary
+      cache_key = {:pattern_cache, strings, depth}
 
-      case Map.get(memo_cache, cache_key) do
+      case Process.get(cache_key) do
         nil ->
           # Not cached, compute patterns
-          patterns = do_learn_patterns(strings, atoms, depth, memo_cache)
+          patterns = do_learn_patterns(strings, atoms, depth, nil)
+          # Store in cache for future lookups
+          Process.put(cache_key, patterns)
           patterns
 
         cached_patterns ->
@@ -242,8 +319,21 @@ defmodule FlashProfile.Learner do
     end
   end
 
+  # Clear the pattern cache from Process dictionary
+  defp clear_pattern_cache do
+    # Get all keys from Process dictionary
+    Process.get_keys()
+    # Delete only pattern cache keys
+    |> Enum.each(fn key ->
+      case key do
+        {:pattern_cache, _, _} -> Process.delete(key)
+        _ -> :ok
+      end
+    end)
+  end
+
   # Core pattern learning logic
-  defp do_learn_patterns(strings, atoms, depth, memo_cache) do
+  defp do_learn_patterns(strings, atoms, depth, _memo_cache) do
     # Get compatible atoms (enriched with constants and fixed-width)
     compatible = get_compatible_atoms(strings, atoms)
 
@@ -268,7 +358,7 @@ defmodule FlashProfile.Learner do
             {acc_patterns ++ new_patterns, count + 1}
           else
             # Recursively learn patterns for suffixes
-            suffix_patterns = learn_patterns_recursive(suffixes, atoms, depth + 1, memo_cache)
+            suffix_patterns = learn_patterns_recursive(suffixes, atoms, depth + 1, nil)
 
             # Prepend this atom to each suffix pattern
             new_patterns =

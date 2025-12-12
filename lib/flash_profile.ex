@@ -9,6 +9,32 @@ defmodule FlashProfile do
   "FlashProfile: A Framework for Synthesizing Data Profiles" by
   Saswat Padhi et al.
 
+  ## Paper Reference
+
+  - Paper: https://doi.org/10.1145/3276520
+  - arXiv: https://arxiv.org/abs/1709.05725
+
+  ## Implementation Notes
+
+  This implementation follows the paper's algorithms (Figures 4-15) with the following
+  extensions and deviations:
+
+  ### Extensions
+
+  - **Additional default atoms**: AlphaDigitSpace, AlphaSpace (beyond Figure 6)
+  - **Enhanced constant enrichment**: Uses common character analysis in addition to LCP
+
+  ### Algorithmic Improvements
+
+  - **SampleDissimilarities**: Uses most recently added seed string for sampling (more diverse)
+  - **Memoization**: Pattern learning caches results to avoid redundant computation
+
+  ### Configuration Defaults
+
+  Default parameter values from paper's evaluation (Section 5):
+  - theta = 1.25 - pattern sampling factor
+  - mu = 4.0 - string sampling factor
+
   ## Quick Start
 
       # Learn patterns for a dataset

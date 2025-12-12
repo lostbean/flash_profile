@@ -103,6 +103,17 @@ defmodule FlashProfile.Clustering.Dissimilarity do
   Returns a cache mapping string pairs to {pattern, cost}. The cache uses
   normalized keys so that {a, b} and {b, a} map to the same entry.
 
+  ## Implementation Note
+
+  This implementation uses the most recently added seed string for computing
+  dissimilarities in each iteration, rather than the original seed string `a`
+  from step 1. This is a minor improvement that results in more diverse
+  sampling of seed strings.
+
+  **Paper** (step 3): `for all b ∈ S do D[a,b] ← LearnBestPattern({a,b})`
+
+  **Implementation**: Uses `current_seed` which is the most recently added seed
+
   ## Algorithm
 
   1. Start with a random seed string

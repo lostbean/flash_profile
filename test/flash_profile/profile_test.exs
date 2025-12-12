@@ -357,4 +357,85 @@ defmodule FlashProfile.ProfileTest do
       assert all_data == Enum.sort(strings)
     end
   end
+
+  describe "boundary enforcement" do
+    test "strictly respects max_patterns" do
+      # Create diverse dataset that would naturally cluster into many groups
+      strings = [
+        "PMC1234567",
+        "PMC2345678",
+        # Group 1: PMC IDs
+        "2024-01-15",
+        "2023-12-25",
+        # Group 2: Dates
+        "user@example.com",
+        "admin@test.org",
+        # Group 3: Emails
+        "+1-555-1234",
+        "+1-555-5678",
+        # Group 4: Phone numbers
+        "v1.2.3",
+        "v2.0.0"
+        # Group 5: Versions
+      ]
+
+      result = Profile.profile(strings, 1, 3)
+
+      # max 3 patterns
+
+      # STRICT assertion
+      assert length(result) <= 3,
+             "Profile returned #{length(result)} patterns but max was 3"
+
+      # All strings should still be covered
+      all_data = Enum.flat_map(result, & &1.data)
+      assert length(all_data) == length(strings)
+    end
+
+    test "respects min_patterns when possible" do
+      # Dataset with clear distinct formats
+      strings = [
+        "AAA111",
+        "BBB222",
+        "CCC333",
+        # Format 1
+        "111-AAA",
+        "222-BBB",
+        "333-CCC"
+        # Format 2
+      ]
+
+      result = Profile.profile(strings, 2, 5)
+
+      # min 2 patterns
+
+      # Should have at least 2 patterns (there are 2 distinct formats)
+      assert length(result) >= 2,
+             "Profile returned #{length(result)} patterns but min was 2"
+    end
+
+    test "handles min_patterns = max_patterns" do
+      strings = ["A1", "B2", "C3", "D4", "E5", "F6"]
+
+      result = Profile.profile(strings, 3, 3)
+
+      # exactly 3 patterns
+
+      assert length(result) == 3, "Profile should return exactly 3 patterns"
+    end
+
+    test "handles single string with min_patterns > 1" do
+      strings = ["PMC1234567"]
+
+      result = Profile.profile(strings, 3, 5)
+
+      # Can't have more patterns than strings
+      assert length(result) == 1
+    end
+
+    test "handles empty dataset" do
+      result = Profile.profile([], 1, 5)
+      assert result == []
+    end
+  end
 end

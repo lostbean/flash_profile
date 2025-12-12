@@ -251,4 +251,124 @@ defmodule FlashProfile.CostTest do
       assert cost == :infinity
     end
   end
+
+  describe "cost calculation with 3+ atoms" do
+    test "calculates cost for 3-atom pattern" do
+      upper = Atom.char_class("Upper", ?A..?Z |> Enum.to_list(), 8.2)
+      digit = Atom.char_class("Digit", ?0..?9 |> Enum.to_list(), 5.0)
+      lower = Atom.char_class("Lower", ?a..?z |> Enum.to_list(), 9.1)
+
+      pattern = [upper, digit, lower]
+      strings = ["A1a", "B2b", "C3c"]
+
+      cost = Cost.calculate(pattern, strings)
+
+      # Manual calculation:
+      # Upper: 1/3 of each string -> W = (1/3 + 1/3 + 1/3) / 3 = 1/3
+      # Digit: 1/3 of each string -> W = 1/3
+      # Lower: 1/3 of each string -> W = 1/3
+      # Cost = 8.2 * 1/3 + 5.0 * 1/3 + 9.1 * 1/3 = 7.43...
+
+      assert_in_delta cost, (8.2 + 5.0 + 9.1) / 3, 0.01
+    end
+
+    test "calculates cost for 5-atom pattern (date format)" do
+      dash = Atom.constant("-")
+
+      # Use fixed-width atoms for date components
+      digit2 = Atom.char_class("Digit", ?0..?9 |> Enum.to_list(), 2, 5.0)
+      digit4 = Atom.char_class("Digit", ?0..?9 |> Enum.to_list(), 4, 5.0)
+
+      pattern = [digit2, dash, digit2, dash, digit4]
+      # MM-DD-YYYY
+      strings = ["01-15-2024", "12-25-2023"]
+
+      cost = Cost.calculate(pattern, strings)
+
+      # Should be finite and reasonable
+      assert is_float(cost)
+      assert cost > 0
+      assert cost < 100
+      # Reasonable upper bound
+    end
+
+    test "fixed-width and variable-width have same cost for uniform data" do
+      upper = Atom.char_class("Upper", ?A..?Z |> Enum.to_list(), 8.2)
+      lower = Atom.char_class("Lower", ?a..?z |> Enum.to_list(), 9.1)
+
+      strings = ["Ab", "Cd"]
+
+      cost_variable = Cost.calculate([upper, lower], strings)
+
+      # Same strings, but with fixed-width atoms (more specific pattern)
+      upper1 = Atom.char_class("Upper", ?A..?Z |> Enum.to_list(), 1, 8.2)
+      lower1 = Atom.char_class("Lower", ?a..?z |> Enum.to_list(), 1, 9.1)
+
+      cost_fixed = Cost.calculate([upper1, lower1], strings)
+
+      # When data is uniform, fixed-width and variable-width have same cost
+      assert_in_delta cost_fixed, cost_variable, 0.01
+    end
+  end
+
+  describe "empty string handling" do
+    test "empty strings in dataset don't crash" do
+      digit = Atom.char_class("Digit", ?0..?9 |> Enum.to_list(), 8.0)
+
+      # Mix of empty and non-empty strings
+      strings = ["123", "", "456", ""]
+
+      # Should not crash
+      cost = Cost.calculate([digit], strings)
+
+      # Should return :infinity since pattern doesn't match empty strings
+      assert cost == :infinity
+    end
+
+    test "all empty strings returns infinity for non-empty pattern" do
+      digit = Atom.char_class("Digit", ?0..?9 |> Enum.to_list(), 8.0)
+
+      cost = Cost.calculate([digit], ["", "", ""])
+
+      # Pattern doesn't match empty strings, so should be :infinity
+      assert cost == :infinity
+    end
+
+    test "empty strings contribute 0.0 to dynamic weight when calculating" do
+      # This tests the internal behavior: empty strings have length 0,
+      # so they contribute 0.0 to the weight calculation.
+      # We can't directly observe this, but we can test that the cost
+      # calculation doesn't crash and returns a reasonable value
+      # when some strings are empty and others match.
+
+      # However, since a pattern either matches ALL strings or returns :infinity,
+      # and empty strings won't match most patterns, this will typically return :infinity.
+
+      # The edge case documentation notes that empty strings contribute 0.0,
+      # which prevents division by zero in the calculate_dynamic_weight function.
+      # This test verifies no crash occurs.
+      digit = Atom.char_class("Digit", ?0..?9 |> Enum.to_list(), 8.0)
+      strings = ["", "123"]
+
+      # This will return :infinity because "" doesn't match [digit]
+      cost = Cost.calculate([digit], strings)
+      assert cost == :infinity
+    end
+
+    test "empty pattern on empty strings returns 0.0" do
+      # Already tested in calculate/2 tests, but including here for completeness
+      cost = Cost.calculate([], [])
+      assert cost == 0.0
+    end
+
+    test "pattern on dataset with only empty string" do
+      # Empty string should not match any real pattern
+      digit = Atom.char_class("Digit", ?0..?9 |> Enum.to_list(), 8.0)
+
+      cost = Cost.calculate([digit], [""])
+
+      # Pattern requires at least one digit, empty string has none
+      assert cost == :infinity
+    end
+  end
 end

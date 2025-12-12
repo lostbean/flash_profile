@@ -1,19 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tree:*)",
-      "Bash(mix compile:*)",
-      "Bash(mix test:*)",
-      "Bash(iex -S mix)",
-      "Bash(find:*)",
-      "Bash(wc:*)",
-      "Bash(elixir:*)",
-      "Bash(mix docs:*)",
-      "Bash(mix run:*)",
-      "Bash(mix dialyzer:*)",
-      "Bash(mix clean:*)",
-      "Bash(iex -S mix:*)",
-      "Bash(1 <<'EOF:*)"
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

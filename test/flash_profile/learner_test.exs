@@ -348,4 +348,66 @@ defmodule FlashProfile.LearnerTest do
       end
     end
   end
+
+  describe "pattern quality" do
+    test "learned pattern doesn't over-match" do
+      # Train on specific format
+      training = ["PMC1234567", "PMC7654321", "PMC1111111"]
+
+      {pattern, _cost} = Learner.learn_best_pattern(training)
+
+      # Pattern should match training data
+      assert Enum.all?(training, fn s -> Pattern.matches?(pattern, s) end)
+
+      # Pattern should NOT match different formats
+      non_matching = ["PMC123", "ABC1234567", "PMC12345678", "pmc1234567"]
+
+      # At least some of these should NOT match (pattern shouldn't be too general)
+      matches = Enum.count(non_matching, fn s -> Pattern.matches?(pattern, s) end)
+
+      assert matches < length(non_matching),
+             "Pattern is too general - matches #{matches}/#{length(non_matching)} non-training strings"
+    end
+
+    test "learned pattern is reasonably specific" do
+      # Train on dates
+      dates = ["2024-01-15", "2023-12-25", "2022-06-30"]
+
+      {pattern, _cost} = Learner.learn_best_pattern(dates)
+
+      # Should match dates
+      assert Enum.all?(dates, fn s -> Pattern.matches?(pattern, s) end)
+
+      # Should NOT match random strings
+      random_strings = ["hello world", "12345", "2024/01/15"]
+      non_matches = Enum.count(random_strings, fn s -> not Pattern.matches?(pattern, s) end)
+
+      assert non_matches >= 2, "Pattern should reject most non-date strings"
+    end
+
+    test "pattern specificity varies with input diversity" do
+      # Homogeneous input - should learn specific pattern
+      homogeneous = ["PMC1234567", "PMC2345678", "PMC3456789"]
+      {pattern_homo, cost_homo} = Learner.learn_best_pattern(homogeneous)
+
+      # Diverse input - should learn more general pattern
+      diverse = ["PMC1234567", "DOI10.1234", "ISBN1234567"]
+      {pattern_div, cost_div} = Learner.learn_best_pattern(diverse)
+
+      # Diverse pattern should have higher cost (more general)
+      # This might fail if no common pattern exists
+      case {pattern_homo, pattern_div} do
+        {nil, _} ->
+          :ok
+
+        # Can't compare if no pattern
+        {_, nil} ->
+          :ok
+
+        _ ->
+          # Homogeneous should have lower cost
+          assert cost_homo <= cost_div or cost_div == :infinity
+      end
+    end
+  end
 end

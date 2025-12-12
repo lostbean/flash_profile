@@ -332,4 +332,441 @@ defmodule FlashProfile.AtomTest do
       assert Atom.match(lower, "ABC") == 0
     end
   end
+
+  describe "Bin atom" do
+    test "matches valid binary characters" do
+      atom = Defaults.get("Bin")
+
+      assert Atom.match(atom, "01010") == 5
+      assert Atom.match(atom, "11111") == 5
+      assert Atom.match(atom, "00000") == 5
+    end
+
+    test "stops at non-binary characters" do
+      atom = Defaults.get("Bin")
+
+      assert Atom.match(atom, "01012") == 4
+      assert Atom.match(atom, "abc") == 0
+      assert Atom.match(atom, "2") == 0
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("Bin")
+
+      assert Atom.match(atom, "101abc") == 3
+      assert Atom.match(atom, "1") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Bin")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "Hex atom" do
+    test "matches valid hexadecimal characters" do
+      atom = Defaults.get("Hex")
+
+      assert Atom.match(atom, "deadBEEF123") == 11
+      assert Atom.match(atom, "0123456789") == 10
+      assert Atom.match(atom, "abcdefABCDEF") == 12
+    end
+
+    test "stops at non-hex characters" do
+      atom = Defaults.get("Hex")
+
+      assert Atom.match(atom, "abc123xyz") == 6
+      assert Atom.match(atom, "xyz") == 0
+      assert Atom.match(atom, "g") == 0
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("Hex")
+
+      assert Atom.match(atom, "F00") == 3
+      assert Atom.match(atom, "cafe!") == 4
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Hex")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "Alpha atom" do
+    test "matches valid alphabetic characters" do
+      atom = Defaults.get("Alpha")
+
+      assert Atom.match(atom, "ABCabc") == 6
+      assert Atom.match(atom, "HelloWorld") == 10
+      assert Atom.match(atom, "xyz") == 3
+    end
+
+    test "stops at non-alphabetic characters" do
+      atom = Defaults.get("Alpha")
+
+      assert Atom.match(atom, "abc123") == 3
+      assert Atom.match(atom, "Hello-World") == 5
+      assert Atom.match(atom, "test_case") == 4
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("Alpha")
+
+      assert Atom.match(atom, "Test!") == 4
+      assert Atom.match(atom, "a") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Alpha")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "AlphaDigit atom" do
+    test "matches valid alphanumeric characters" do
+      atom = Defaults.get("AlphaDigit")
+
+      assert Atom.match(atom, "abc123XYZ") == 9
+      assert Atom.match(atom, "Test123") == 7
+      assert Atom.match(atom, "12345abc") == 8
+    end
+
+    test "stops at non-alphanumeric characters" do
+      atom = Defaults.get("AlphaDigit")
+
+      assert Atom.match(atom, "abc-123") == 3
+      assert Atom.match(atom, "test_case") == 4
+      assert Atom.match(atom, "hello world") == 5
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("AlphaDigit")
+
+      assert Atom.match(atom, "a1b2c3!") == 6
+      assert Atom.match(atom, "x") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("AlphaDigit")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "Space atom" do
+    test "matches valid whitespace characters" do
+      atom = Defaults.get("Space")
+
+      assert Atom.match(atom, "   ") == 3
+      assert Atom.match(atom, "\t\t") == 2
+      assert Atom.match(atom, " \t\n") == 3
+    end
+
+    test "matches leading spaces and stops at non-space" do
+      atom = Defaults.get("Space")
+
+      assert Atom.match(atom, " abc") == 1
+      assert Atom.match(atom, "  123") == 2
+      assert Atom.match(atom, "\thello") == 1
+    end
+
+    test "returns 0 for non-whitespace start" do
+      atom = Defaults.get("Space")
+
+      assert Atom.match(atom, "abc") == 0
+      assert Atom.match(atom, "123") == 0
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Space")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "AlphaDigitSpace atom" do
+    test "matches alphanumeric and whitespace characters" do
+      atom = Defaults.get("AlphaDigitSpace")
+
+      assert Atom.match(atom, "abc 123") == 7
+      assert Atom.match(atom, "Hello World") == 11
+      assert Atom.match(atom, "test\t123") == 8
+    end
+
+    test "stops at other characters" do
+      atom = Defaults.get("AlphaDigitSpace")
+
+      assert Atom.match(atom, "abc!123") == 3
+      assert Atom.match(atom, "hello-world") == 5
+      assert Atom.match(atom, "test.case") == 4
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("AlphaDigitSpace")
+
+      assert Atom.match(atom, "a b c-") == 5
+      assert Atom.match(atom, " ") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("AlphaDigitSpace")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "DotDash atom" do
+    test "matches valid dot and dash characters" do
+      atom = Defaults.get("DotDash")
+
+      assert Atom.match(atom, ".-.-") == 4
+      assert Atom.match(atom, "...") == 3
+      assert Atom.match(atom, "---") == 3
+    end
+
+    test "stops at non-dot-dash characters" do
+      atom = Defaults.get("DotDash")
+
+      assert Atom.match(atom, ".-a") == 2
+      assert Atom.match(atom, ".123") == 1
+      assert Atom.match(atom, "-_") == 1
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("DotDash")
+
+      assert Atom.match(atom, "..--") == 4
+      assert Atom.match(atom, ".") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("DotDash")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "Punct atom" do
+    test "matches valid punctuation characters" do
+      atom = Defaults.get("Punct")
+
+      assert Atom.match(atom, ".,:?/-") == 6
+      assert Atom.match(atom, "...") == 3
+      assert Atom.match(atom, ":://") == 4
+    end
+
+    test "stops at non-punctuation characters" do
+      atom = Defaults.get("Punct")
+
+      assert Atom.match(atom, ".a") == 1
+      assert Atom.match(atom, ":123") == 1
+      assert Atom.match(atom, ",hello") == 1
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("Punct")
+
+      assert Atom.match(atom, ".,") == 2
+      assert Atom.match(atom, "?!") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Punct")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "AlphaDash atom" do
+    test "matches valid alphabetic and dash characters" do
+      atom = Defaults.get("AlphaDash")
+
+      assert Atom.match(atom, "abc-def") == 7
+      assert Atom.match(atom, "Hello-World") == 11
+      assert Atom.match(atom, "test-") == 5
+    end
+
+    test "stops at non-alpha-dash characters" do
+      atom = Defaults.get("AlphaDash")
+
+      assert Atom.match(atom, "abc_def") == 3
+      assert Atom.match(atom, "test123") == 4
+      assert Atom.match(atom, "hello world") == 5
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("AlphaDash")
+
+      assert Atom.match(atom, "a-b-c!") == 5
+      assert Atom.match(atom, "-") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("AlphaDash")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "Symb atom" do
+    test "matches valid symbol characters" do
+      atom = Defaults.get("Symb")
+
+      assert Atom.match(atom, "-.,://@#") == 8
+      assert Atom.match(atom, "$%&*()") == 6
+      assert Atom.match(atom, "!~`+=<>?") == 8
+    end
+
+    test "stops at non-symbol characters" do
+      atom = Defaults.get("Symb")
+
+      assert Atom.match(atom, "-a") == 1
+      assert Atom.match(atom, ".123") == 1
+      assert Atom.match(atom, "@test") == 1
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("Symb")
+
+      assert Atom.match(atom, "...") == 3
+      assert Atom.match(atom, "#") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Symb")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "AlphaSpace atom" do
+    test "matches valid alphabetic and whitespace characters" do
+      atom = Defaults.get("AlphaSpace")
+
+      assert Atom.match(atom, "abc def") == 7
+      assert Atom.match(atom, "Hello World") == 11
+      assert Atom.match(atom, "test\tcase") == 9
+    end
+
+    test "stops at non-alpha-space characters" do
+      atom = Defaults.get("AlphaSpace")
+
+      assert Atom.match(atom, "abc123") == 3
+      assert Atom.match(atom, "hello-world") == 5
+      assert Atom.match(atom, "test.case") == 4
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("AlphaSpace")
+
+      assert Atom.match(atom, "a b c-") == 5
+      assert Atom.match(atom, " ") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("AlphaSpace")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "Base64 atom" do
+    test "matches valid Base64 characters" do
+      atom = Defaults.get("Base64")
+
+      assert Atom.match(atom, "abc123+=") == 8
+      assert Atom.match(atom, "ABC123") == 6
+      assert Atom.match(atom, "aGVsbG8=") == 8
+    end
+
+    test "stops at non-Base64 characters" do
+      atom = Defaults.get("Base64")
+
+      assert Atom.match(atom, "abc!") == 3
+      assert Atom.match(atom, "test-case") == 4
+      assert Atom.match(atom, "hello world") == 5
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("Base64")
+
+      assert Atom.match(atom, "abc==!") == 5
+      assert Atom.match(atom, "+") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Base64")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "Any atom" do
+    test "matches any printable character greedily" do
+      atom = Defaults.get("Any")
+
+      assert Atom.match(atom, "abc123") == 6
+      assert Atom.match(atom, "Hello, World!") == 13
+      assert Atom.match(atom, "test-case_123") == 13
+    end
+
+    test "matches all printable ASCII characters" do
+      atom = Defaults.get("Any")
+
+      assert Atom.match(atom, "!@#$%^&*()") == 10
+      assert Atom.match(atom, "[]{}|\\") == 6
+      assert Atom.match(atom, "~`+=<>?") == 7
+    end
+
+    test "returns correct match length" do
+      atom = Defaults.get("Any")
+
+      assert Atom.match(atom, "x") == 1
+      assert Atom.match(atom, " ") == 1
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("Any")
+      assert Atom.match(atom, "") == 0
+    end
+  end
+
+  describe "TitleCaseWord atom" do
+    test "matches valid title case words" do
+      atom = Defaults.get("TitleCaseWord")
+
+      assert Atom.match(atom, "Hello") == 5
+      assert Atom.match(atom, "World") == 5
+      assert Atom.match(atom, "Test") == 4
+    end
+
+    test "does not match all uppercase words" do
+      atom = Defaults.get("TitleCaseWord")
+
+      assert Atom.match(atom, "HELLO") == 0
+      assert Atom.match(atom, "WORLD") == 0
+      assert Atom.match(atom, "ABC") == 0
+    end
+
+    test "does not match all lowercase words" do
+      atom = Defaults.get("TitleCaseWord")
+
+      assert Atom.match(atom, "hello") == 0
+      assert Atom.match(atom, "world") == 0
+      assert Atom.match(atom, "test") == 0
+    end
+
+    test "stops at mixed case or non-letter" do
+      atom = Defaults.get("TitleCaseWord")
+
+      assert Atom.match(atom, "HelloWorld") == 5
+      assert Atom.match(atom, "Test123") == 4
+      assert Atom.match(atom, "Hello-World") == 5
+    end
+
+    test "requires at least one lowercase letter after uppercase" do
+      atom = Defaults.get("TitleCaseWord")
+
+      assert Atom.match(atom, "H") == 0
+      assert Atom.match(atom, "He") == 2
+      assert Atom.match(atom, "Hi!") == 2
+    end
+
+    test "handles empty string" do
+      atom = Defaults.get("TitleCaseWord")
+      assert Atom.match(atom, "") == 0
+    end
+  end
 end

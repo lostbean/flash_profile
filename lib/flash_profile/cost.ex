@@ -42,6 +42,15 @@ defmodule FlashProfile.Cost do
   - Lower cost = more desirable pattern
   - Empty pattern on empty string set has cost 0
   - If pattern doesn't match all strings, cost is :infinity
+
+  ## Edge Cases
+
+  - **Empty pattern on empty dataset**: Returns 0.0 (vacuous truth)
+  - **Empty strings in dataset**: Empty strings contribute 0.0 to the dynamic weight
+    calculation (avoiding division by zero). This means empty strings effectively
+    don't affect the cost. Consider filtering empty strings before calling this module
+    if they should not be present in your data.
+  - **Pattern on empty dataset**: Returns 0.0 (any pattern vacuously matches empty set)
   """
 
   alias FlashProfile.Atom
