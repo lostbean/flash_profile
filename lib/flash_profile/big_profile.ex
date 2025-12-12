@@ -57,7 +57,7 @@ defmodule FlashProfile.BigProfile do
       3
   """
 
-  alias FlashProfile.{ProfileEntry, Pattern, Learner}
+  alias FlashProfile.{ProfileEntry, Pattern, Compress}
   alias FlashProfile.Atoms.Defaults
 
   # Default configuration matching paper's recommendations
@@ -327,81 +327,9 @@ defmodule FlashProfile.BigProfile do
     if length(combined) <= max_patterns do
       combined
     else
-      # Compress to max_patterns
-      # Since Compress module is not implemented, use simple approach:
-      # Keep the M entries with lowest cost
-      compress_profile(combined, max_patterns, config)
+      # Compress to max_patterns using the Compress module
+      atoms = config[:atoms] || Defaults.all()
+      Compress.compress(combined, max_patterns, atoms: atoms)
     end
-  end
-
-  # Simplified compression: keep M entries with lowest cost
-  # Full implementation would use CompressProfile from Compress module
-  # which merges similar entries
-  defp compress_profile(profile, max_count, config) do
-    atoms = config[:atoms] || Defaults.all()
-
-    # If already within limit, return as-is
-    if length(profile) <= max_count do
-      profile
-    else
-      # Iteratively merge entries until we reach max_count
-      compress_iterative(profile, max_count, atoms)
-    end
-  end
-
-  # Iteratively merge profile entries until we reach target count
-  defp compress_iterative(profile, target_count, atoms) do
-    if length(profile) <= target_count do
-      profile
-    else
-      # Find best pair to merge: (X, Y) ← argmin LearnBestPattern(X.Data ∪ Y.Data).Cost
-      {entry1, entry2, merged_entry} = find_best_merge(profile, atoms)
-
-      # Remove the two entries and add merged entry
-      new_profile =
-        profile
-        |> Enum.reject(fn e -> e == entry1 or e == entry2 end)
-        |> Kernel.++([merged_entry])
-
-      # Continue compression
-      compress_iterative(new_profile, target_count, atoms)
-    end
-  end
-
-  # Find the best pair of entries to merge
-  # Returns {entry1, entry2, merged_entry}
-  defp find_best_merge(profile, atoms) do
-    # Generate all pairs
-    pairs =
-      for {e1, i} <- Enum.with_index(profile),
-          {e2, j} <- Enum.with_index(profile),
-          i < j do
-        {e1, e2}
-      end
-
-    # Find pair with minimum merge cost
-    {best_e1, best_e2} =
-      Enum.min_by(pairs, fn {e1, e2} ->
-        merged_data = e1.data ++ e2.data
-
-        case Learner.learn_best_pattern(merged_data, atoms) do
-          {:error, :no_pattern} -> :infinity
-          {_pattern, cost} -> cost
-        end
-      end)
-
-    # Create merged entry
-    merged_data = best_e1.data ++ best_e2.data
-
-    merged_entry =
-      case Learner.learn_best_pattern(merged_data, atoms) do
-        {:error, :no_pattern} ->
-          ProfileEntry.new(merged_data, nil, :infinity)
-
-        {pattern, cost} ->
-          ProfileEntry.new(merged_data, pattern, cost)
-      end
-
-    {best_e1, best_e2, merged_entry}
   end
 end

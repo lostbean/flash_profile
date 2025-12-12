@@ -5,58 +5,138 @@ defmodule FlashProfile.ProfileTest do
   alias FlashProfile.{Profile, ProfileEntry, Pattern}
   alias FlashProfile.Atoms.Defaults
 
+  # Helper functions for stronger assertions
+
+  # Verify that all input strings are covered by profile entries (no data loss).
+  defp all_strings_covered?(entries, original_strings) do
+    covered = entries |> Enum.flat_map(& &1.data) |> MapSet.new()
+    original = MapSet.new(original_strings)
+    MapSet.equal?(covered, original)
+  end
+
+  # Verify that each pattern actually matches all its data strings.
+  defp patterns_match_data?(entries) do
+    Enum.all?(entries, fn entry ->
+      # Entries with nil patterns are expected (learning failed)
+      if entry.pattern do
+        Enum.all?(entry.data, fn s -> Pattern.matches?(entry.pattern, s) end)
+      else
+        true
+      end
+    end)
+  end
+
+  # Verify that cost values are reasonable (not :infinity for entries with patterns).
+  defp costs_reasonable?(entries) do
+    Enum.all?(entries, fn entry ->
+      case {entry.pattern, entry.cost} do
+        {nil, :infinity} -> true
+        {nil, _} -> false
+        {_, :infinity} -> false
+        {_, cost} when is_float(cost) and cost >= 0.0 -> true
+        _ -> false
+      end
+    end)
+  end
+
+  # Verify profile entry count is within bounds.
+  defp count_within_bounds?(entries, min_patterns, max_patterns, string_count) do
+    count = length(entries)
+    # Can't have more patterns than strings
+    effective_max = min(max_patterns, string_count)
+    count >= min(min_patterns, string_count) and count <= effective_max
+  end
+
   describe "profile/4" do
     test "profiles homogeneous dataset" do
       strings = ["PMC123", "PMC456", "PMC789"]
-      entries = Profile.profile(strings, 1, 3)
+      min_patterns = 1
+      max_patterns = 3
+      entries = Profile.profile(strings, min_patterns, max_patterns)
 
-      assert is_list(entries)
-      assert length(entries) >= 1
-      assert length(entries) <= 3
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
+
+      # Verify count is within bounds
+      assert count_within_bounds?(entries, min_patterns, max_patterns, length(strings)),
+             "Entry count #{length(entries)} not within bounds [#{min_patterns}, #{max_patterns}]"
 
       # All entries should be ProfileEntry structs
       Enum.each(entries, fn entry ->
         assert %ProfileEntry{} = entry
         assert is_list(entry.data)
-        assert is_list(entry.pattern) or is_nil(entry.pattern)
-        assert is_float(entry.cost) or entry.cost == :infinity
+        assert length(entry.data) >= 1, "Entry has no data strings"
       end)
     end
 
     test "profiles heterogeneous dataset" do
       # Mix of different formats
       strings = ["PMC123", "PMC456", "2023-01-01", "2024-12-31"]
-      entries = Profile.profile(strings, 1, 4)
+      min_patterns = 1
+      max_patterns = 4
+      entries = Profile.profile(strings, min_patterns, max_patterns)
 
-      assert is_list(entries)
-      assert length(entries) >= 1
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
 
       # Should create multiple patterns for different formats
       # (actual number depends on clustering)
-      total_strings =
-        entries
-        |> Enum.flat_map(fn entry -> entry.data end)
-        |> Enum.sort()
-
-      assert total_strings == Enum.sort(strings)
+      assert length(entries) >= 2,
+             "Should create multiple patterns for heterogeneous data, got #{length(entries)}"
     end
 
     test "respects min_patterns boundary" do
       strings = ["abc", "def", "ghi", "jkl"]
       min_patterns = 2
-      entries = Profile.profile(strings, min_patterns, 5)
+      max_patterns = 5
+      entries = Profile.profile(strings, min_patterns, max_patterns)
 
-      # Should have at least min_patterns entries
-      # (unless dataset is too small)
-      assert length(entries) >= 1
+      # Verify all strings are covered
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Should have at least min_patterns entries (when possible)
+      assert length(entries) >= min_patterns,
+             "Expected at least #{min_patterns} entries, got #{length(entries)}"
     end
 
     test "respects max_patterns boundary" do
       strings = ["a", "b", "c", "d", "e", "f", "g", "h"]
+      min_patterns = 1
       max_patterns = 3
-      entries = Profile.profile(strings, 1, max_patterns)
+      entries = Profile.profile(strings, min_patterns, max_patterns)
 
-      assert length(entries) <= max_patterns
+      # Verify all strings are covered
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Must strictly respect max_patterns
+      assert length(entries) <= max_patterns,
+             "Expected at most #{max_patterns} entries, got #{length(entries)}"
     end
 
     test "handles empty dataset" do
@@ -115,8 +195,16 @@ defmodule FlashProfile.ProfileTest do
       strings = ["PMC123", "PMC456", "ABC789"]
       entries = Profile.profile(strings, 1, 3, theta: 2.0)
 
-      assert is_list(entries)
-      assert length(entries) >= 1
+      # Verify all strings are covered
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
     end
 
     test "accepts custom atoms parameter" do
@@ -124,8 +212,16 @@ defmodule FlashProfile.ProfileTest do
       atoms = [Defaults.get("Digit")]
       entries = Profile.profile(strings, 1, 2, atoms: atoms)
 
-      assert is_list(entries)
-      assert length(entries) >= 1
+      # Verify all strings are covered
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
     end
   end
 
@@ -218,20 +314,20 @@ defmodule FlashProfile.ProfileTest do
 
       entries = Profile.profile(strings, 1, 2)
 
-      assert length(entries) >= 1
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
 
-      # All strings should be covered by some entry
-      all_data = entries |> Enum.flat_map(fn e -> e.data end) |> Enum.sort()
-      assert all_data == Enum.sort(strings)
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
 
-      # Patterns should match their respective data
-      Enum.each(entries, fn entry ->
-        if entry.pattern do
-          Enum.each(entry.data, fn s ->
-            assert Pattern.matches?(entry.pattern, s)
-          end)
-        end
-      end)
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
+
+      # PMC identifiers should cluster together
+      assert length(entries) <= 2,
+             "PMC identifiers should cluster efficiently, got #{length(entries)} clusters"
     end
 
     test "profiles dates" do
@@ -244,11 +340,20 @@ defmodule FlashProfile.ProfileTest do
 
       entries = Profile.profile(strings, 1, 2)
 
-      assert length(entries) >= 1
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
 
-      # All dates should appear in some cluster
-      all_data = entries |> Enum.flat_map(fn e -> e.data end) |> Enum.sort()
-      assert all_data == Enum.sort(strings)
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
+
+      # Dates should cluster efficiently
+      assert length(entries) <= 2,
+             "Dates should cluster efficiently, got #{length(entries)} clusters"
     end
 
     test "profiles mixed formats into separate clusters" do
@@ -264,28 +369,40 @@ defmodule FlashProfile.ProfileTest do
 
       entries = Profile.profile(strings, 2, 5)
 
-      # Should create multiple clusters for different formats
-      assert length(entries) >= 2
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
 
-      # All strings should be covered
-      all_data = entries |> Enum.flat_map(fn e -> e.data end) |> Enum.sort()
-      assert all_data == Enum.sort(strings)
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
+
+      # Should create multiple clusters for different formats
+      assert length(entries) >= 2,
+             "Should create multiple clusters for different formats, got #{length(entries)}"
     end
 
     test "profiles phone numbers" do
       strings = ["555-1234", "123-4567", "999-0000", "111-2222"]
       entries = Profile.profile(strings, 1, 2)
 
-      assert length(entries) >= 1
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
 
-      # Should learn a pattern that matches all phone numbers
-      Enum.each(entries, fn entry ->
-        if entry.pattern do
-          Enum.each(entry.data, fn s ->
-            assert Pattern.matches?(entry.pattern, s)
-          end)
-        end
-      end)
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
+
+      # Phone numbers should cluster together efficiently
+      assert length(entries) <= 2,
+             "Phone numbers should cluster efficiently, got #{length(entries)} clusters"
     end
 
     test "handles dataset with some incompatible strings" do
@@ -293,13 +410,21 @@ defmodule FlashProfile.ProfileTest do
 
       entries = Profile.profile(strings, 1, 4)
 
-      # Should still produce a profile
-      assert is_list(entries)
-      assert length(entries) >= 1
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
 
-      # All strings should be in some cluster
-      all_data = entries |> Enum.flat_map(fn e -> e.data end) |> Enum.sort()
-      assert all_data == Enum.sort(strings)
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Note: Empty strings and incompatible strings may have nil patterns with :infinity cost
+      # which is acceptable - just verify structure is valid
+      Enum.each(entries, fn entry ->
+        assert %ProfileEntry{} = entry
+        assert is_list(entry.data)
+        assert length(entry.data) >= 1, "Entry has no data strings"
+      end)
     end
   end
 
@@ -329,15 +454,29 @@ defmodule FlashProfile.ProfileTest do
   describe "edge cases and error handling" do
     test "handles very small datasets" do
       assert [] = Profile.profile([], 1, 1)
-      assert [%ProfileEntry{}] = Profile.profile(["x"], 1, 1)
+
+      entries = Profile.profile(["x"], 1, 1)
+      assert [%ProfileEntry{}] = entries
+      assert all_strings_covered?(entries, ["x"])
+      assert patterns_match_data?(entries)
     end
 
     test "handles min_patterns == max_patterns" do
       strings = ["a", "b", "c", "d"]
-      entries = Profile.profile(strings, 2, 2)
+      min_patterns = 2
+      max_patterns = 2
+      entries = Profile.profile(strings, min_patterns, max_patterns)
 
-      assert is_list(entries)
+      # Verify all strings are covered
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
       # Should aim for exactly 2 patterns
+      assert length(entries) == 2, "Expected exactly 2 patterns, got #{length(entries)}"
     end
 
     test "handles large max_patterns" do
@@ -345,16 +484,33 @@ defmodule FlashProfile.ProfileTest do
       # More patterns than strings
       entries = Profile.profile(strings, 1, 10)
 
+      # Verify all strings are covered
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
       # Should return at most n patterns for n strings
-      assert length(entries) <= length(strings)
+      assert length(entries) <= length(strings),
+             "Can't have more patterns than strings: got #{length(entries)}, expected <= #{length(strings)}"
     end
 
     test "profile preserves all input strings" do
       strings = ["PMC123", "ABC", "123", "xyz", "2023-01-01"]
       entries = Profile.profile(strings, 1, 5)
 
-      all_data = entries |> Enum.flat_map(fn e -> e.data end) |> Enum.sort()
-      assert all_data == Enum.sort(strings)
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(entries, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(entries),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(entries), "Cost values are not reasonable"
     end
   end
 
@@ -381,15 +537,20 @@ defmodule FlashProfile.ProfileTest do
 
       result = Profile.profile(strings, 1, 3)
 
-      # max 3 patterns
-
-      # STRICT assertion
+      # STRICT assertion - max 3 patterns
       assert length(result) <= 3,
              "Profile returned #{length(result)} patterns but max was 3"
 
-      # All strings should still be covered
-      all_data = Enum.flat_map(result, & &1.data)
-      assert length(all_data) == length(strings)
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(result, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(result),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(result), "Cost values are not reasonable"
     end
 
     test "respects min_patterns when possible" do
@@ -407,11 +568,20 @@ defmodule FlashProfile.ProfileTest do
 
       result = Profile.profile(strings, 2, 5)
 
-      # min 2 patterns
-
       # Should have at least 2 patterns (there are 2 distinct formats)
       assert length(result) >= 2,
              "Profile returned #{length(result)} patterns but min was 2"
+
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(result, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(result),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(result), "Cost values are not reasonable"
     end
 
     test "handles min_patterns = max_patterns" do
@@ -420,8 +590,18 @@ defmodule FlashProfile.ProfileTest do
       result = Profile.profile(strings, 3, 3)
 
       # exactly 3 patterns
-
       assert length(result) == 3, "Profile should return exactly 3 patterns"
+
+      # Verify all strings are covered (no data loss)
+      assert all_strings_covered?(result, strings),
+             "Not all input strings are covered by profile entries"
+
+      # Verify patterns match their data
+      assert patterns_match_data?(result),
+             "Some patterns don't match their assigned data strings"
+
+      # Verify cost values are reasonable
+      assert costs_reasonable?(result), "Cost values are not reasonable"
     end
 
     test "handles single string with min_patterns > 1" do
@@ -430,7 +610,16 @@ defmodule FlashProfile.ProfileTest do
       result = Profile.profile(strings, 3, 5)
 
       # Can't have more patterns than strings
-      assert length(result) == 1
+      assert length(result) == 1,
+             "Single string should result in 1 pattern, got #{length(result)}"
+
+      # Verify the string is covered
+      assert all_strings_covered?(result, strings),
+             "Input string not covered by profile entries"
+
+      # Verify pattern matches the data
+      assert patterns_match_data?(result),
+             "Pattern doesn't match its assigned data string"
     end
 
     test "handles empty dataset" do
