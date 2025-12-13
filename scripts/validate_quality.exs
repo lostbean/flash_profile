@@ -39,9 +39,7 @@ defmodule QualityValidation do
   }
 
   def run do
-    backend = FlashProfile.Config.backend()
     IO.puts("=== FlashProfile Quality Validation ===")
-    IO.puts("Backend: #{backend}")
     IO.puts("")
 
     results =

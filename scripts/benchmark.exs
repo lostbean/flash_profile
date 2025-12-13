@@ -1,7 +1,5 @@
 # FlashProfile Performance Benchmark
-# Usage:
-#   mix run scripts/benchmark.exs                    # Run with Zig backend (default)
-#   FLASH_PROFILE_BACKEND=elixir mix run scripts/benchmark.exs  # Run with pure Elixir
+# Usage: mix run scripts/benchmark.exs
 
 defmodule Benchmark do
   @fixtures_dir Path.join([__DIR__, "..", "test", "fixtures", "flash_profile_demo"])
@@ -20,9 +18,7 @@ defmodule Benchmark do
   ]
 
   def run do
-    backend = FlashProfile.Config.backend()
     IO.puts("=== FlashProfile Performance Benchmark ===")
-    IO.puts("Backend: #{backend}")
     IO.puts("Time: #{DateTime.utc_now() |> DateTime.to_string()}")
     IO.puts("")
 
@@ -91,7 +87,6 @@ defmodule Benchmark do
 
   def run_with_ipv4 do
     IO.puts("=== Running with IPv4 dataset (scale test) ===")
-    IO.puts("Backend: #{FlashProfile.Config.backend()}")
     IO.puts("")
 
     data = load_fixture("ipv4.json")

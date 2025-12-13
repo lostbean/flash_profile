@@ -37,12 +37,11 @@ defmodule FlashProfile.AtomTest do
       assert_in_delta digit.static_cost, 8.2, 0.01
     end
 
-    test "stores character set in params" do
+    test "stores characters and width in params" do
       digit = Atom.char_class("Digit", ~c"0123456789", 8.2)
 
       assert digit.params.chars == ~c"0123456789"
-      assert MapSet.member?(digit.params.char_set, ?5)
-      refute MapSet.member?(digit.params.char_set, ?a)
+      assert digit.params.width == 0
     end
   end
 

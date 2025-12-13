@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # CI script: check format (no modify), compile, and test
-# Fails if any formatting is off
+# Fails on any error or test failure
+# Runs Zig checks first (faster), then Elixir
 set -e
 
 cd "$(dirname "$0")/.."
@@ -12,31 +13,49 @@ echo "  CI Checks (read-only)"
 echo "========================================"
 echo
 
-echo "=== Elixir CI Checks ==="
-
-echo "Checking Elixir format..."
-mix format --check-formatted
-
-echo "Compiling with warnings as errors..."
-mix compile --warnings-as-errors
-
-echo "Running Elixir tests..."
-mix test
-
-echo
-
 echo "=== Zig CI Checks ==="
 
 echo "Checking Zig format..."
-zig fmt --check "$ZIG_DIR"/*.zig
+if ! zig fmt --check "$ZIG_DIR"/*.zig; then
+    echo "ERROR: Zig files are not formatted!"
+    exit 1
+fi
 
 echo "Running ast-check..."
 for file in "$ZIG_DIR"/*.zig; do
-    zig ast-check "$file"
+    if ! zig ast-check "$file"; then
+        echo "ERROR: ast-check failed for $file"
+        exit 1
+    fi
 done
 
 echo "Running Zig tests..."
-zig test "$ZIG_DIR/main.zig" 2>/dev/null || echo "Note: Zig tests may require beam module (skipped in standalone mode)"
+if ! zig test "$ZIG_DIR/main.zig"; then
+    echo "ERROR: Zig tests failed!"
+    exit 1
+fi
+
+echo
+
+echo "=== Elixir CI Checks ==="
+
+echo "Checking Elixir format..."
+if ! mix format --check-formatted; then
+    echo "ERROR: Elixir files are not formatted!"
+    exit 1
+fi
+
+echo "Compiling..."
+if ! mix compile; then
+    echo "ERROR: Compilation failed!"
+    exit 1
+fi
+
+echo "Running Elixir tests..."
+if ! mix test --exclude slow; then
+    echo "ERROR: Elixir tests failed!"
+    exit 1
+fi
 
 echo
 

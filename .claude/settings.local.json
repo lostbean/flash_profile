@@ -27,7 +27,10 @@
       "Bash(FLASH_PROFILE_BACKEND=elixir mix run:*)",
       "Bash(mix clean:*)",
       "Bash(elixir:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(sort:*)",
+      "Bash(timeout 90 mix test:*)",
+      "Bash(scripts/check-zig.sh:*)"
     ],
     "deny": [],
     "ask": []

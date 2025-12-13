@@ -52,7 +52,8 @@ pub const DissimilarityMatrix = struct {
     /// Create a new dissimilarity matrix for n strings.
     pub fn init(n: usize, allocator: Allocator) !DissimilarityMatrix {
         // Size of upper triangle: n*(n-1)/2
-        const size = (n * (n - 1)) / 2;
+        // Handle edge case where n == 0 to avoid underflow
+        const size = if (n == 0) 0 else (n * (n - 1)) / 2;
         const values = try allocator.alloc(f64, size);
 
         // Initialize with zeros

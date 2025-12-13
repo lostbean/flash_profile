@@ -1000,3 +1000,177 @@ test "LinkageCache: larger dataset with incremental updates" {
     // First merge should be (a,b) at height 1.0 or (c,d) at height 2.0
     try testing.expect(hier.root.getHeight() > 0.0);
 }
+
+test "hierarchy: large dataset clustering" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Test with 50+ elements using synthetic data
+    const n: usize = 50;
+    var strings_array: [n][]const u8 = undefined;
+    var string_buffers: [n][10]u8 = undefined;
+
+    // Generate synthetic string data
+    for (0..n) |i| {
+        const buf = &string_buffers[i];
+        const str = std.fmt.bufPrint(buf, "str_{d}", .{i}) catch unreachable;
+        strings_array[i] = str;
+    }
+
+    const strings: []const []const u8 = &strings_array;
+    var matrix = try DissimilarityMatrix.init(strings, allocator);
+    defer matrix.deinit();
+
+    // Set up dissimilarities: distance proportional to index difference
+    // This creates natural clusters of nearby indices
+    for (0..n) |i| {
+        for (i + 1..n) |j| {
+            const diff = j - i;
+            const dissim = @as(f64, @floatFromInt(diff));
+            try matrix.set(i, j, .{ .finite = dissim });
+        }
+    }
+
+    // Build hierarchy
+    var hier = try ahc(&matrix, allocator);
+    defer hier.deinit();
+
+    // Verify hierarchy structure is valid
+    try testing.expectEqual(@as(usize, n), hier.num_strings);
+    try testing.expectEqual(HierarchyNode.internal, std.meta.activeTag(hier.root.*));
+    try testing.expect(hier.root.getHeight() > 0.0);
+
+    // Test partition extraction at various k values
+    for ([_]usize{ 1, 5, 10, 25, 50 }) |k| {
+        var part = try partition(&hier, k, allocator);
+        defer part.deinit();
+
+        // Verify we get at most k clusters
+        try testing.expect(part.clusters.len <= k);
+        try testing.expect(part.clusters.len >= 1);
+
+        // Verify all elements are accounted for
+        var total_elements: usize = 0;
+        for (part.clusters) |cluster| {
+            total_elements += cluster.len;
+        }
+        try testing.expectEqual(n, total_elements);
+
+        // Verify no empty clusters
+        for (part.clusters) |cluster| {
+            try testing.expect(cluster.len > 0);
+        }
+    }
+}
+
+test "hierarchy: all equal dissimilarities" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Test edge case where all pairs have same dissimilarity
+    const strings = [_][]const u8{ "a", "b", "c", "d", "e" };
+    var matrix = try DissimilarityMatrix.init(&strings, allocator);
+    defer matrix.deinit();
+
+    // Set all pairwise dissimilarities to the same value
+    const uniform_distance: f64 = 5.0;
+    for (0..strings.len) |i| {
+        for (i + 1..strings.len) |j| {
+            try matrix.set(i, j, .{ .finite = uniform_distance });
+        }
+    }
+
+    // Build hierarchy - any merge order should be valid
+    var hier = try ahc(&matrix, allocator);
+    defer hier.deinit();
+
+    // Verify basic properties
+    try testing.expectEqual(@as(usize, strings.len), hier.num_strings);
+    try testing.expectEqual(HierarchyNode.internal, std.meta.activeTag(hier.root.*));
+
+    // All internal nodes should have the same height (uniform_distance)
+    // since all merges happen at the same dissimilarity
+    try testing.expectEqual(uniform_distance, hier.root.getHeight());
+
+    // Test that we can partition into any number of clusters
+    for (1..strings.len + 1) |k| {
+        var part = try partition(&hier, k, allocator);
+        defer part.deinit();
+
+        // Verify partition is valid
+        try testing.expect(part.clusters.len <= k);
+        try testing.expect(part.clusters.len >= 1);
+
+        // Verify all elements are present
+        var total: usize = 0;
+        for (part.clusters) |cluster| {
+            total += cluster.len;
+        }
+        try testing.expectEqual(strings.len, total);
+    }
+}
+
+test "hierarchy: handles infinite dissimilarities" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Test when some pairs have infinite dissimilarity
+    // Matrix must be fully connected with finite edges for clustering to complete
+    const strings = [_][]const u8{ "a", "b", "c", "d" };
+    var matrix = try DissimilarityMatrix.init(&strings, allocator);
+    defer matrix.deinit();
+
+    // Create two tight groups with large distance between them
+    // Group 1: {a, b} - close together
+    try matrix.set(0, 1, .{ .finite = 1.0 });
+
+    // Group 2: {c, d} - close together
+    try matrix.set(2, 3, .{ .finite = 1.5 });
+
+    // Between-group distances: very large but finite
+    try matrix.set(0, 2, .{ .finite = 100.0 });
+    try matrix.set(0, 3, .{ .finite = 100.0 });
+    try matrix.set(1, 2, .{ .finite = 100.0 });
+    try matrix.set(1, 3, .{ .finite = 100.0 });
+
+    // Build hierarchy - should merge within groups first, then merge groups
+    var hier = try ahc(&matrix, allocator);
+    defer hier.deinit();
+
+    // Verify basic properties
+    try testing.expectEqual(@as(usize, 4), hier.num_strings);
+    try testing.expectEqual(HierarchyNode.internal, std.meta.activeTag(hier.root.*));
+
+    // Root merge should happen at the large between-group distance
+    try testing.expectEqual(@as(f64, 100.0), hier.root.getHeight());
+
+    // Extract 2 clusters - should separate the two groups
+    var part = try partition(&hier, 2, allocator);
+    defer part.deinit();
+
+    try testing.expectEqual(@as(usize, 2), part.clusters.len);
+
+    // Each cluster should have 2 elements
+    try testing.expectEqual(@as(usize, 2), part.clusters[0].len);
+    try testing.expectEqual(@as(usize, 2), part.clusters[1].len);
+
+    // Now test with some truly infinite dissimilarities
+    // We'll use a fully connected subgraph but leave one edge undefined
+    const strings2 = [_][]const u8{ "x", "y", "z" };
+    var matrix2 = try DissimilarityMatrix.init(&strings2, allocator);
+    defer matrix2.deinit();
+
+    // All pairs have finite dissimilarity
+    try matrix2.set(0, 1, .{ .finite = 2.0 });
+    try matrix2.set(1, 2, .{ .finite = 3.0 });
+    // Leave (0,2) unset - defaults to infinity
+    // But when we merge {0,1}, the linkage to {2} will be max(d(0,2), d(1,2)) = max(inf, 3.0) = inf
+    // So we need to set it:
+    try matrix2.set(0, 2, .{ .finite = 5.0 });
+
+    var hier2 = try ahc(&matrix2, allocator);
+    defer hier2.deinit();
+
+    try testing.expectEqual(@as(usize, 3), hier2.num_strings);
+    try testing.expect(hier2.root.getHeight() > 0.0);
+}

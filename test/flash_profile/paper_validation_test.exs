@@ -42,11 +42,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Expected: [Digit]{3} · '-' · [Digit]{3} · '-' · [Digit]{4}
       # Our pattern should have similar structure: Digit atoms and '-' constants
       assert_has_digit_atoms(pattern)
-
-      # Log the learned pattern for debugging
-      IO.puts("\nPhones pattern: #{FlashProfile.pattern_to_string(pattern)}")
-      IO.puts("Pattern cost: #{cost}")
-      IO.puts("Expected: [Digit]{3} · '-' · [Digit]{3} · '-' · [Digit]{4}")
     end
 
     @tag :bool
@@ -74,11 +69,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Option 1: 'yes' | 'no' (explicit constants)
       # Option 2: [Lower]+ (character class)
       # Both are valid
-
-      # Log the learned pattern
-      IO.puts("\nBool pattern: #{FlashProfile.pattern_to_string(pattern)}")
-      IO.puts("Pattern cost: #{cost}")
-      IO.puts("Expected: 'yes' | 'no' OR [Lower]+")
     end
 
     @tag :dates
@@ -108,11 +98,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Should have digit atoms and '.' constants
 
       assert_has_digit_atoms(pattern)
-
-      # Log the learned pattern
-      IO.puts("\nDates pattern: #{FlashProfile.pattern_to_string(pattern)}")
-      IO.puts("Pattern cost: #{cost}")
-      IO.puts("Expected: [Digit]{2} · '.0' · [Digit]{1} · '.2016'")
     end
 
     @tag :ipv4
@@ -142,11 +127,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Should have digit atoms and '.' constants
 
       assert_has_digit_atoms(pattern)
-
-      # Log the learned pattern
-      IO.puts("\nIPv4 pattern: #{FlashProfile.pattern_to_string(pattern)}")
-      IO.puts("Pattern cost: #{cost}")
-      IO.puts("Expected: [Digit]+ · '.' · [Digit]+ · '.' · [Digit]+ · '.' · [Digit]+")
     end
 
     @tag :emails
@@ -172,11 +152,6 @@ defmodule FlashProfile.PaperValidationTest do
 
       # Expected: [Lower]+ · '.' · [Lower]+ · '@' · [Lower]+ · '.com'
       # Should have Lower atoms and special character constants
-
-      # Log the learned pattern
-      IO.puts("\nEmails pattern: #{FlashProfile.pattern_to_string(pattern)}")
-      IO.puts("Pattern cost: #{cost}")
-      IO.puts("Expected: [Lower]+ · '.' · [Lower]+ · '@' · [Lower]+ · '.com'")
     end
   end
 
@@ -209,9 +184,6 @@ defmodule FlashProfile.PaperValidationTest do
         assert FlashProfile.matches?(entry.pattern, str),
                "Pattern should match its own data: #{str}"
       end
-
-      IO.puts("\nPhones profile: #{length(profile)} pattern(s)")
-      IO.puts("Best pattern covers: #{coverage_percent}% of data")
     end
 
     @tag :emails_profile
@@ -236,9 +208,6 @@ defmodule FlashProfile.PaperValidationTest do
         assert FlashProfile.matches?(entry.pattern, str),
                "Pattern should match: #{str}"
       end
-
-      IO.puts("\nEmails profile: #{length(profile)} pattern(s)")
-      IO.puts("Best pattern covers: #{coverage_percent}% of data")
     end
   end
 
@@ -264,8 +233,6 @@ defmodule FlashProfile.PaperValidationTest do
         # These are rough heuristics based on pattern complexity
         assert cost < max_expected_cost,
                "Cost for #{filename} too high: #{cost} >= #{max_expected_cost}"
-
-        IO.puts("\n#{filename}: cost = #{cost} (max: #{max_expected_cost})")
       end
     end
 
@@ -280,8 +247,6 @@ defmodule FlashProfile.PaperValidationTest do
       emails_fixture = load_fixture("emails.json")
       {emails_pattern, _} = FlashProfile.learn_pattern(Map.get(emails_fixture, "Data"))
       assert_has_lower_atoms(emails_pattern)
-
-      IO.puts("\nAtom specificity checks passed")
     end
 
     @tag :specificity_ipv4
@@ -292,8 +257,6 @@ defmodule FlashProfile.PaperValidationTest do
       ipv4_fixture = load_fixture("ipv4.json")
       {ipv4_pattern, _} = FlashProfile.learn_pattern(Map.get(ipv4_fixture, "Data"))
       assert_has_digit_atoms(ipv4_pattern)
-
-      IO.puts("\nIPv4 atom specificity check passed")
     end
   end
 
@@ -419,8 +382,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Should produce 3-5 patterns
       assert length(entries) >= 3, "Expected at least 3 patterns, got #{length(entries)}"
       assert length(entries) <= 5, "Expected at most 5 patterns, got #{length(entries)}"
-
-      IO.puts("\nHetero dates: #{length(entries)} patterns (expected ~#{expected_disjuncts})")
     end
 
     @tag :hetero_dates
@@ -470,8 +431,6 @@ defmodule FlashProfile.PaperValidationTest do
 
       assert check_cluster_contains?(entries, month_day_year, "Month DD, YYYY dates"),
              "Month DD, YYYY date strings should cluster together"
-
-      IO.puts("\nHetero dates clustering validation passed")
     end
   end
 
@@ -495,8 +454,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Should produce 4-8 patterns
       assert length(entries) >= 4, "Expected at least 4 patterns, got #{length(entries)}"
       assert length(entries) <= 8, "Expected at most 8 patterns, got #{length(entries)}"
-
-      IO.puts("\nZip codes: #{length(entries)} patterns (expected ~#{expected_disjuncts})")
     end
 
     @tag :zip_codes
@@ -548,8 +505,6 @@ defmodule FlashProfile.PaperValidationTest do
 
       assert check_cluster_contains?(entries, canadian, "Canadian postal codes"),
              "Canadian postal codes should cluster together"
-
-      IO.puts("\nZip codes clustering validation passed")
     end
 
     @tag :zip_codes
@@ -568,6 +523,7 @@ defmodule FlashProfile.PaperValidationTest do
   end
 
   describe "HETEROGENEOUS patterns - motivating_example.json" do
+    @describetag :slow
     @tag :motivating_example
     test "produces approximately 5 clusters" do
       fixture = load_fixture("motivating_example.json")
@@ -587,10 +543,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Should produce 4-7 patterns
       assert length(entries) >= 4, "Expected at least 4 patterns, got #{length(entries)}"
       assert length(entries) <= 7, "Expected at most 7 patterns, got #{length(entries)}"
-
-      IO.puts(
-        "\nMotivating example: #{length(entries)} patterns (expected ~#{expected_disjuncts})"
-      )
     end
 
     @tag :motivating_example
@@ -745,8 +697,6 @@ defmodule FlashProfile.PaperValidationTest do
       # All "not_available" strings should be in the same cluster
       assert check_cluster_contains?(entries, not_available, "not_available strings"),
              "All 'not_available' strings should cluster together"
-
-      IO.puts("\nMotivating example clustering validation passed")
     end
 
     @tag :motivating_example
@@ -773,8 +723,6 @@ defmodule FlashProfile.PaperValidationTest do
       # Verify output is still correct
       assert all_strings_covered?(entries, strings)
       assert patterns_match_data?(entries)
-
-      IO.puts("\nPerformance: #{time_seconds}s for 1451 strings")
     end
   end
 
@@ -859,14 +807,11 @@ defmodule FlashProfile.PaperValidationTest do
     end
 
     @tag :cluster_quality
+    @tag :slow
     test "motivating_example - identifier type separation" do
       fixture = load_fixture("motivating_example.json")
       strings = Map.get(fixture, "Data")
       entries = FlashProfile.profile(strings, min_patterns: 4, max_patterns: 7)
-
-      # Get identifiers by type
-      pmc_ids = Enum.filter(strings, fn s -> String.starts_with?(s, "PMC") end)
-      isbn_ids = Enum.filter(strings, fn s -> String.starts_with?(s, "ISBN:") end)
 
       # Find main cluster for each type
       pmc_cluster_idx =

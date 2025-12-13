@@ -2,7 +2,7 @@
 # Usage: mix run scripts/benchmark_zig.exs
 #
 # This script benchmarks the low-level Zig NIF functions directly,
-# bypassing the Elixir fallback layer for accurate performance measurement.
+# testing core functions with varying dataset sizes and types.
 
 defmodule ZigBenchmark do
   @moduledoc """
@@ -34,19 +34,8 @@ defmodule ZigBenchmark do
     IO.puts("=" |> String.duplicate(80))
     IO.puts("FlashProfile Zig NIF Performance Benchmark")
     IO.puts("=" |> String.duplicate(80))
-    IO.puts("Backend: #{FlashProfile.Config.backend()}")
     IO.puts("Time: #{DateTime.utc_now() |> DateTime.to_string()}")
     IO.puts("Iterations per test: #{@iterations}")
-    IO.puts("")
-
-    # Verify we're using Zig backend
-    case FlashProfile.Config.backend() do
-      :zig ->
-        IO.puts("✓ Zig backend confirmed")
-      other ->
-        IO.puts("⚠ Warning: Backend is #{other}, expected :zig")
-        IO.puts("  Set FLASH_PROFILE_BACKEND=zig to test Zig implementation")
-    end
     IO.puts("")
 
     results = %{

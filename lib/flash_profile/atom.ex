@@ -63,13 +63,8 @@ defmodule FlashProfile.Atom do
     # Cost proportional to 1/length - shorter strings have higher cost
     cost = 100.0 / len
 
-    # Use native Zig or pure Elixir based on configuration
-    matcher =
-      if FlashProfile.Config.use_zig?() do
-        fn s -> FlashProfile.Native.match_constant(string, s) end
-      else
-        fn s -> match_constant_elixir(string, s) end
-      end
+    # Use native Zig NIF
+    matcher = fn s -> FlashProfile.Native.match_constant(string, s) end
 
     %__MODULE__{
       name: inspect(string),
@@ -105,15 +100,27 @@ defmodule FlashProfile.Atom do
   """
   @spec char_class(String.t(), charlist(), float()) :: t()
   def char_class(name, chars, static_cost) when is_list(chars) and is_float(static_cost) do
-    # Convert charlist to MapSet for O(1) lookup (Elixir fallback)
-    char_set = MapSet.new(chars)
-
-    # Use native Zig for standard atoms when configured, otherwise pure Elixir
+    # Use native Zig NIF for standard atoms, inline Elixir for custom atoms
     matcher =
-      if FlashProfile.Config.use_zig?() and name in @native_atom_names do
+      if name in @native_atom_names do
         fn s -> FlashProfile.Native.match_char_class(name, s) end
       else
-        fn s -> match_char_class_variable_elixir(s, char_set) end
+        # Inline Elixir implementation for custom character classes
+        char_set = MapSet.new(chars)
+
+        fn string ->
+          string
+          |> String.graphemes()
+          |> Enum.reduce_while(0, fn grapheme, count ->
+            codepoint = String.to_charlist(grapheme) |> List.first()
+
+            if codepoint && MapSet.member?(char_set, codepoint) do
+              {:cont, count + 1}
+            else
+              {:halt, count}
+            end
+          end)
+        end
       end
 
     %__MODULE__{
@@ -121,7 +128,7 @@ defmodule FlashProfile.Atom do
       type: :char_class,
       matcher: matcher,
       static_cost: static_cost,
-      params: %{chars: chars, width: 0, char_set: char_set}
+      params: %{chars: chars, width: 0}
     }
   end
 
@@ -151,12 +158,26 @@ defmodule FlashProfile.Atom do
   @spec char_class(String.t(), charlist(), pos_integer(), float()) :: t()
   def char_class(name, chars, width, static_cost)
       when is_list(chars) and is_integer(width) and width > 0 and is_float(static_cost) do
-    char_set = MapSet.new(chars)
     # Fixed-width cost is base_cost / width
     adjusted_cost = static_cost / width
+    char_set = MapSet.new(chars)
 
     matcher = fn s ->
-      match_char_class_fixed(s, char_set, width)
+      graphemes = String.graphemes(s)
+
+      if length(graphemes) < width do
+        0
+      else
+        matched =
+          graphemes
+          |> Enum.take(width)
+          |> Enum.all?(fn grapheme ->
+            codepoint = String.to_charlist(grapheme) |> List.first()
+            codepoint && MapSet.member?(char_set, codepoint)
+          end)
+
+        if matched, do: width, else: 0
+      end
     end
 
     %__MODULE__{
@@ -164,7 +185,7 @@ defmodule FlashProfile.Atom do
       type: :char_class,
       matcher: matcher,
       static_cost: adjusted_cost,
-      params: %{chars: chars, width: width, char_set: char_set}
+      params: %{chars: chars, width: width}
     }
   end
 
@@ -342,53 +363,6 @@ defmodule FlashProfile.Atom do
       when is_integer(width) and width > 0 do
     chars = params.chars
     char_class(name, chars, width, base_cost)
-  end
-
-  ## Private Helper Functions
-
-  # Pure Elixir implementation for constant string matching
-  defp match_constant_elixir(constant, string) do
-    if String.starts_with?(string, constant) do
-      String.length(constant)
-    else
-      0
-    end
-  end
-
-  # Pure Elixir implementation for custom character classes (non-standard atoms)
-  defp match_char_class_variable_elixir(string, char_set) do
-    string
-    |> String.graphemes()
-    |> Enum.reduce_while(0, fn grapheme, count ->
-      # Convert grapheme to codepoint for comparison
-      codepoint = String.to_charlist(grapheme) |> List.first()
-
-      if codepoint && MapSet.member?(char_set, codepoint) do
-        {:cont, count + 1}
-      else
-        {:halt, count}
-      end
-    end)
-  end
-
-  # Match fixed-width character class
-  # Returns width if exactly width characters match, 0 otherwise
-  defp match_char_class_fixed(string, char_set, width) do
-    graphemes = String.graphemes(string)
-
-    if length(graphemes) < width do
-      0
-    else
-      matched =
-        graphemes
-        |> Enum.take(width)
-        |> Enum.all?(fn grapheme ->
-          codepoint = String.to_charlist(grapheme) |> List.first()
-          codepoint && MapSet.member?(char_set, codepoint)
-        end)
-
-      if matched, do: width, else: 0
-    end
   end
 
   @doc """
