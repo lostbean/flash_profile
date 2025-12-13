@@ -31,6 +31,7 @@ defmodule FlashProfile.PaperValidationTest do
 
       # Functional validation: pattern should match ALL input strings
       coverage = calculate_coverage(pattern, data)
+
       assert coverage == 100.0,
              "Pattern should match 100% of inputs, got #{coverage}%"
 
@@ -62,6 +63,7 @@ defmodule FlashProfile.PaperValidationTest do
 
       # Functional validation: 100% coverage
       coverage = calculate_coverage(pattern, data)
+
       assert coverage == 100.0,
              "Pattern should match 100% of inputs, got #{coverage}%"
 
@@ -93,6 +95,7 @@ defmodule FlashProfile.PaperValidationTest do
 
       # Functional validation: 100% coverage
       coverage = calculate_coverage(pattern, data)
+
       assert coverage == 100.0,
              "Pattern should match 100% of inputs, got #{coverage}%"
 
@@ -128,6 +131,7 @@ defmodule FlashProfile.PaperValidationTest do
 
       # Functional validation: 100% coverage
       coverage = calculate_coverage(pattern, data)
+
       assert coverage == 100.0,
              "Pattern should match 100% of inputs, got #{coverage}%"
 
@@ -159,6 +163,7 @@ defmodule FlashProfile.PaperValidationTest do
 
       # Functional validation: 100% coverage
       coverage = calculate_coverage(pattern, data)
+
       assert coverage == 100.0,
              "Pattern should match 100% of inputs, got #{coverage}%"
 
@@ -195,6 +200,7 @@ defmodule FlashProfile.PaperValidationTest do
       # The best pattern should cover most or all of the data
       # For homogeneous data, we expect high coverage (80%+)
       coverage_percent = length(entry.data) / length(data) * 100
+
       assert coverage_percent >= 80.0,
              "Best pattern should cover at least 80% of data, got #{coverage_percent}%"
 
@@ -221,6 +227,7 @@ defmodule FlashProfile.PaperValidationTest do
       # Check coverage
       # For homogeneous data, we expect high coverage (80%+)
       coverage_percent = length(entry.data) / length(data) * 100
+
       assert coverage_percent >= 80.0,
              "Best pattern should cover at least 80% of data, got #{coverage_percent}%"
 
@@ -406,7 +413,8 @@ defmodule FlashProfile.PaperValidationTest do
       min_patterns = expected_disjuncts - 1
       max_patterns = expected_disjuncts + 1
 
-      entries = FlashProfile.profile(strings, min_patterns: min_patterns, max_patterns: max_patterns)
+      entries =
+        FlashProfile.profile(strings, min_patterns: min_patterns, max_patterns: max_patterns)
 
       # Should produce 3-5 patterns
       assert length(entries) >= 3, "Expected at least 3 patterns, got #{length(entries)}"
@@ -453,11 +461,13 @@ defmodule FlashProfile.PaperValidationTest do
 
       # Check that ISO dates cluster together
       iso_dates = ["2005-11-14", "1993-06-26"]
+
       assert check_cluster_contains?(entries, iso_dates, "ISO dates"),
              "ISO date strings should cluster together"
 
       # Check that "Month DD, YYYY" dates cluster together
       month_day_year = ["December 10, 1980", "September 25, 1970", "October 12, 2005"]
+
       assert check_cluster_contains?(entries, month_day_year, "Month DD, YYYY dates"),
              "Month DD, YYYY date strings should cluster together"
 
@@ -479,7 +489,8 @@ defmodule FlashProfile.PaperValidationTest do
       min_patterns = expected_disjuncts - 2
       max_patterns = expected_disjuncts + 2
 
-      entries = FlashProfile.profile(strings, min_patterns: min_patterns, max_patterns: max_patterns)
+      entries =
+        FlashProfile.profile(strings, min_patterns: min_patterns, max_patterns: max_patterns)
 
       # Should produce 4-8 patterns
       assert length(entries) >= 4, "Expected at least 4 patterns, got #{length(entries)}"
@@ -570,13 +581,16 @@ defmodule FlashProfile.PaperValidationTest do
       min_patterns = expected_disjuncts - 1
       max_patterns = expected_disjuncts + 2
 
-      entries = FlashProfile.profile(strings, min_patterns: min_patterns, max_patterns: max_patterns)
+      entries =
+        FlashProfile.profile(strings, min_patterns: min_patterns, max_patterns: max_patterns)
 
       # Should produce 4-7 patterns
       assert length(entries) >= 4, "Expected at least 4 patterns, got #{length(entries)}"
       assert length(entries) <= 7, "Expected at most 7 patterns, got #{length(entries)}"
 
-      IO.puts("\nMotivating example: #{length(entries)} patterns (expected ~#{expected_disjuncts})")
+      IO.puts(
+        "\nMotivating example: #{length(entries)} patterns (expected ~#{expected_disjuncts})"
+      )
     end
 
     @tag :motivating_example

@@ -63,13 +63,13 @@ defmodule FlashProfile.Atom do
     # Cost proportional to 1/length - shorter strings have higher cost
     cost = 100.0 / len
 
-    matcher = fn s ->
-      if String.starts_with?(s, string) do
-        len
+    # Use native Zig or pure Elixir based on configuration
+    matcher =
+      if FlashProfile.Config.use_zig?() do
+        fn s -> FlashProfile.Native.match_constant(string, s) end
       else
-        0
+        fn s -> match_constant_elixir(string, s) end
       end
-    end
 
     %__MODULE__{
       name: inspect(string),
@@ -79,6 +79,9 @@ defmodule FlashProfile.Atom do
       params: %{string: string, length: len}
     }
   end
+
+  # Standard atom names that have native Zig implementations
+  @native_atom_names ~w(Lower Upper Digit Alpha AlphaDigit Space Any)
 
   @doc """
   Create a variable-width character class atom.
@@ -102,12 +105,16 @@ defmodule FlashProfile.Atom do
   """
   @spec char_class(String.t(), charlist(), float()) :: t()
   def char_class(name, chars, static_cost) when is_list(chars) and is_float(static_cost) do
-    # Convert charlist to MapSet for O(1) lookup
+    # Convert charlist to MapSet for O(1) lookup (Elixir fallback)
     char_set = MapSet.new(chars)
 
-    matcher = fn s ->
-      match_char_class_variable(s, char_set)
-    end
+    # Use native Zig for standard atoms when configured, otherwise pure Elixir
+    matcher =
+      if FlashProfile.Config.use_zig?() and name in @native_atom_names do
+        fn s -> FlashProfile.Native.match_char_class(name, s) end
+      else
+        fn s -> match_char_class_variable_elixir(s, char_set) end
+      end
 
     %__MODULE__{
       name: name,
@@ -339,9 +346,17 @@ defmodule FlashProfile.Atom do
 
   ## Private Helper Functions
 
-  # Match variable-width character class
-  # Returns length of longest prefix where all characters are in char_set
-  defp match_char_class_variable(string, char_set) do
+  # Pure Elixir implementation for constant string matching
+  defp match_constant_elixir(constant, string) do
+    if String.starts_with?(string, constant) do
+      String.length(constant)
+    else
+      0
+    end
+  end
+
+  # Pure Elixir implementation for custom character classes (non-standard atoms)
+  defp match_char_class_variable_elixir(string, char_set) do
     string
     |> String.graphemes()
     |> Enum.reduce_while(0, fn grapheme, count ->
@@ -374,5 +389,37 @@ defmodule FlashProfile.Atom do
 
       if matched, do: width, else: 0
     end
+  end
+
+  @doc """
+  Check if this is a standard atom with native Zig implementation.
+  """
+  @spec native_atom?(t()) :: boolean()
+  def native_atom?(%__MODULE__{name: name, type: :char_class, params: %{width: 0}}) do
+    name in @native_atom_names
+  end
+
+  def native_atom?(_atom), do: false
+
+  @doc """
+  Match using the native Zig implementation (for standard atoms only).
+  Falls back to Elixir for non-standard atoms.
+  """
+  @spec match_native(t(), String.t()) :: non_neg_integer()
+  def match_native(
+        %__MODULE__{name: name, type: :char_class, params: %{width: 0}} = _atom,
+        string
+      )
+      when name in ["Lower", "Upper", "Digit", "Alpha", "AlphaDigit", "Space", "Any"] do
+    FlashProfile.Native.match_char_class(name, string)
+  end
+
+  def match_native(%__MODULE__{type: :constant, params: %{string: const}}, string) do
+    FlashProfile.Native.match_constant(const, string)
+  end
+
+  def match_native(atom, string) do
+    # Fall back to Elixir for non-standard atoms
+    match(atom, string)
   end
 end

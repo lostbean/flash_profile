@@ -18,9 +18,9 @@ defmodule FlashProfile.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:zigler, "~> 0.15.1", runtime: false},
       {:stream_data, "~> 1.0", only: [:test, :dev]}
     ]
   end

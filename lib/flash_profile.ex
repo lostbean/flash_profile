@@ -210,7 +210,58 @@ defmodule FlashProfile do
   def profile(strings, min_patterns, max_patterns, opts \\ [])
       when is_list(strings) and is_integer(min_patterns) and min_patterns > 0 and
              is_integer(max_patterns) and max_patterns > 0 and min_patterns <= max_patterns do
-    Profile.profile(strings, min_patterns, max_patterns, opts)
+    config = Keyword.merge(@default_opts, opts)
+
+    # Use custom atoms if provided, otherwise use NIF with default atoms
+    # Also fall back to Elixir for large datasets until NIF is optimized
+    if config[:atoms] || length(strings) > 30 do
+      Profile.profile(strings, min_patterns, max_patterns, opts)
+    else
+      theta = config[:theta]
+
+      # Use NIF implementation for performance
+      case FlashProfile.Native.profile(strings, min_patterns, max_patterns, theta) do
+        {:ok, entries} ->
+          convert_nif_profile_entries(entries, strings)
+
+        {:error, _reason} ->
+          # Fall back to Elixir implementation on error
+          Profile.profile(strings, min_patterns, max_patterns, opts)
+      end
+    end
+  end
+
+  # Convert NIF profile entries to Elixir ProfileEntry structs
+  defp convert_nif_profile_entries(entries, strings) do
+    Enum.map(entries, fn %{pattern: pattern_names, cost: cost, indices: indices} ->
+      # Convert pattern atom names back to Elixir Atom structs
+      pattern = Enum.map(pattern_names, &name_to_atom/1)
+      # Get actual string data from indices
+      data = Enum.map(indices, fn i -> Enum.at(strings, i) end)
+
+      %ProfileEntry{
+        pattern: pattern,
+        cost: cost,
+        data: data
+      }
+    end)
+  end
+
+  # Convert atom name string to Elixir Atom struct
+  defp name_to_atom(name) when is_binary(name) do
+    alias FlashProfile.Atoms.CharClass
+
+    case name do
+      "Lower" -> CharClass.lower()
+      "Upper" -> CharClass.upper()
+      "Digit" -> CharClass.digit()
+      "Alpha" -> CharClass.alpha()
+      "AlphaDigit" -> CharClass.alpha_digit()
+      "Space" -> CharClass.space()
+      "Any" -> CharClass.any()
+      # Handle constant atoms (any other string is treated as constant)
+      _ -> Atom.constant(name)
+    end
   end
 
   @doc """
@@ -255,7 +306,28 @@ defmodule FlashProfile do
   """
   @spec big_profile([String.t()], keyword()) :: profile()
   def big_profile(strings, opts \\ []) when is_list(strings) do
-    BigProfile.big_profile(strings, opts)
+    config = Keyword.merge(@default_opts, opts)
+
+    # Use custom atoms if provided, otherwise use NIF with default atoms
+    # Also fall back to Elixir for large datasets until NIF is optimized
+    if config[:atoms] || length(strings) > 50 do
+      BigProfile.big_profile(strings, opts)
+    else
+      min_patterns = config[:min_patterns]
+      max_patterns = config[:max_patterns]
+      theta = config[:theta]
+      mu = config[:mu]
+
+      # Use NIF implementation for performance
+      case FlashProfile.Native.big_profile(strings, min_patterns, max_patterns, theta, mu) do
+        {:ok, entries} ->
+          convert_nif_profile_entries(entries, strings)
+
+        {:error, _reason} ->
+          # Fall back to Elixir implementation on error
+          BigProfile.big_profile(strings, opts)
+      end
+    end
   end
 
   @doc """
@@ -293,9 +365,26 @@ defmodule FlashProfile do
   @spec learn_pattern([String.t()], keyword()) :: {pattern(), float()} | {:error, :no_pattern}
   def learn_pattern(strings, opts \\ []) when is_list(strings) do
     config = Keyword.merge(@default_opts, opts)
-    atoms = config[:atoms] || Defaults.all()
 
-    Learner.learn_best_pattern(strings, atoms)
+    # Use custom atoms if provided, otherwise use NIF with default atoms
+    if config[:atoms] do
+      # Custom atoms require Elixir implementation
+      Learner.learn_best_pattern(strings, config[:atoms])
+    else
+      # Use NIF for default atoms
+      case FlashProfile.Native.learn_pattern_nif(strings) do
+        {:ok, {pattern_names, cost}} ->
+          pattern = Enum.map(pattern_names, &name_to_atom/1)
+          {pattern, cost}
+
+        {:error, :no_pattern} ->
+          {:error, :no_pattern}
+
+        {:error, _reason} ->
+          # Fall back to Elixir implementation on error
+          Learner.learn_best_pattern(strings, Defaults.all())
+      end
+    end
   end
 
   @doc """
@@ -339,9 +428,25 @@ defmodule FlashProfile do
   def dissimilarity(string1, string2, opts \\ [])
       when is_binary(string1) and is_binary(string2) do
     config = Keyword.merge(@default_opts, opts)
-    atoms = config[:atoms] || Defaults.all()
 
-    Dissimilarity.compute(string1, string2, atoms)
+    # Use custom atoms if provided, otherwise use NIF with default atoms
+    if config[:atoms] do
+      # Custom atoms require Elixir implementation
+      Dissimilarity.compute(string1, string2, config[:atoms])
+    else
+      # Use NIF for default atoms
+      case FlashProfile.Native.dissimilarity_nif(string1, string2) do
+        {:ok, cost} ->
+          cost
+
+        {:error, :no_pattern} ->
+          :infinity
+
+        {:error, _reason} ->
+          # Fall back to Elixir implementation on error
+          Dissimilarity.compute(string1, string2, Defaults.all())
+      end
+    end
   end
 
   @doc """

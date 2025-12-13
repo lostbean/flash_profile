@@ -1,0 +1,194 @@
+================================================================================
+FlashProfile Zig NIF Performance Benchmark
+================================================================================
+Backend: zig
+Time: 2025-12-12 22:43:27.125912Z
+Iterations per test: 10
+
+✓ Zig backend confirmed
+
+--------------------------------------------------------------------------------
+Benchmarking: FlashProfile.Native.learn_pattern_nif/1
+--------------------------------------------------------------------------------
+
+
+19:43:27.130 [debug] loaded module at Elixir.FlashProfile.Native
+Test: pmc_small
+  Input: 3 strings: ["PMC123", "PMC456", "PMC789"]
+  Avg: 17.52ms | Min: 17.2ms | Max: 18.92ms
+  Result: pattern=[Upper, Digit], cost=2.73
+
+Test: pmc_medium
+  Input: 7 strings: ["PMC100", "PMC200", "PMC300"]...
+  Avg: 19.4ms | Min: 19.15ms | Max: 19.7ms
+  Result: pattern=[Upper, Digit], cost=2.73
+
+Test: dates_small
+  Input: 3 strings: ["2023-01-15", "2024-06-30", "2025-12-01"]
+  Avg: 12.32ms | Min: 11.83ms | Max: 13.02ms
+  Result: pattern=[Digit, Any], cost=13.28
+
+Test: dates_medium
+  Input: 7 strings: ["2023-01-15", "2024-06-30", "2025-12-01"]...
+  Avg: 14.54ms | Min: 14.26ms | Max: 14.87ms
+  Result: pattern=[Digit, Any], cost=13.28
+
+Test: mixed_small
+  Input: 3 strings: ["ABC123", "DEF456", "GHI789"]
+  Avg: 62.0μs | Min: 58.0μs | Max: 72.0μs
+  Result: pattern=[Upper, Digit], cost=2.73
+
+Test: mixed_medium
+  Input: 7 strings: ["ABC123", "DEF456", "GHI789"]...
+  Avg: 86.9μs | Min: 86.0μs | Max: 88.0μs
+  Result: pattern=[Upper, Digit], cost=2.73
+
+Test: emails_small
+  Input: 3 strings: ["user@example.com", "admin@test.org", "info@site.net"]
+  Avg: 15.33ms | Min: 14.87ms | Max: 17.78ms
+  Result: pattern=[Lower, Any], cost=72.28
+
+Test: phones_small
+  Input: 3 strings: ["555-1234", "555-5678", "555-9012"]
+  Avg: 11.78ms | Min: 11.63ms | Max: 11.85ms
+  Result: pattern=[Digit, Any], cost=15.57
+
+Test: lower_only
+  Input: 3 strings: ["abc", "def", "ghi"]
+  Avg: 22.9μs | Min: 16.0μs | Max: 38.0μs
+  Result: pattern=[Lower], cost=3.03
+
+Test: upper_only
+  Input: 3 strings: ["ABC", "DEF", "GHI"]
+  Avg: 16.5μs | Min: 16.0μs | Max: 17.0μs
+  Result: pattern=[Upper], cost=2.73
+
+Test: digits_only
+  Input: 3 strings: ["123", "456", "789"]
+  Avg: 13.4μs | Min: 13.0μs | Max: 14.0μs
+  Result: pattern=[Digit], cost=2.73
+
+Test: heterogeneous
+  Input: 5 strings: ["PMC123", "2023-01-15", "user@example.com"]...
+  Avg: 9.4μs | Min: 9.0μs | Max: 11.0μs
+  Result: pattern=[Any], cost=100.0
+
+
+--------------------------------------------------------------------------------
+Benchmarking: FlashProfile.Native.dissimilarity_nif/2
+--------------------------------------------------------------------------------
+
+Test: pmc_pair
+  Input: pair: ("PMC123", "PMC456")
+  Avg: 17.05ms | Min: 16.84ms | Max: 17.94ms
+  Result: cost=2.73
+
+Test: date_pair
+  Input: pair: ("2023-01-15", "2024-06-30")
+  Avg: 15.47ms | Min: 15.04ms | Max: 16.46ms
+  Result: cost=13.28
+
+Test: mixed_pair
+  Input: pair: ("ABC123", "DEF456")
+  Avg: 64.6μs | Min: 59.0μs | Max: 71.0μs
+  Result: cost=2.73
+
+Test: email_pair
+  Input: pair: ("user@example.com", "admin@test.org")
+  Avg: 14.92ms | Min: 14.49ms | Max: 15.54ms
+  Result: cost=72.41
+
+Test: phone_pair
+  Input: pair: ("555-1234", "555-5678")
+  Avg: 11.2ms | Min: 11.05ms | Max: 11.49ms
+  Result: cost=15.57
+
+Test: lower_pair
+  Input: pair: ("abc", "def")
+  Avg: 14.4μs | Min: 13.0μs | Max: 19.0μs
+  Result: cost=3.03
+
+Test: upper_pair
+  Input: pair: ("ABC", "DEF")
+  Avg: 13.9μs | Min: 13.0μs | Max: 15.0μs
+  Result: cost=2.73
+
+Test: digit_pair
+  Input: pair: ("123", "456")
+  Avg: 11.4μs | Min: 10.0μs | Max: 16.0μs
+  Result: cost=2.73
+
+Test: similar_strings
+  Input: pair: ("hello", "hallo")
+  Avg: 434.0μs | Min: 427.0μs | Max: 441.0μs
+  Result: cost=1.82
+
+Test: dissimilar_strings
+  Input: pair: ("abc123", "XYZ-999")
+  Avg: 13.7μs | Min: 13.0μs | Max: 16.0μs
+  Result: cost=55.89
+
+
+--------------------------------------------------------------------------------
+Benchmarking: FlashProfile.Native.profile_nif/4
+--------------------------------------------------------------------------------
+
+Test: pmc_small_1_3
+  Input: 3 strings, min=1, max=3, θ=1.25
+  Avg: 128.41ms | Min: 123.63ms | Max: 135.65ms
+  Result: 3 clusters covering 3 strings
+
+Test: pmc_medium_1_5
+  Input: 7 strings, min=1, max=5, θ=1.25
+  Avg: 637.14ms | Min: 599.8ms | Max: 675.51ms
+  Result: 5 clusters covering 7 strings
+
+Test: dates_small_1_3
+  Input: 3 strings, min=1, max=3, θ=1.25
+  Avg: 119.27ms | Min: 117.32ms | Max: 122.58ms
+  Result: 3 clusters covering 3 strings
+
+Test: mixed_medium_1_5
+  Input: 7 strings, min=1, max=5, θ=1.25
+  Avg: 61.22ms | Min: 60.42ms | Max: 63.02ms
+  Result: 5 clusters covering 7 strings
+
+Test: heterogeneous_1_10
+  Input: 5 strings, min=1, max=10, θ=1.25
+  Avg: 153.73ms | Min: 149.67ms | Max: 160.03ms
+  Result: 5 clusters covering 5 strings
+
+Test: pmc_medium_tight_theta
+  Input: 7 strings, min=1, max=5, θ=1.1
+  Avg: 1.87s | Min: 1.82s | Max: 1.91s
+  Result: 5 clusters covering 7 strings
+
+Test: pmc_medium_loose_theta
+  Input: 7 strings, min=1, max=5, θ=2.0
+  Avg: 614.61ms | Min: 590.46ms | Max: 646.06ms
+  Result: 5 clusters covering 7 strings
+
+
+================================================================================
+Summary
+================================================================================
+
+learn_pattern_nif (12 tests):
+  Average across all tests: 7.59ms
+  Fastest single run: 9.0μs
+  Slowest single run: 19.7ms
+
+dissimilarity_nif (10 tests):
+  Average across all tests: 5.92ms
+  Fastest single run: 10.0μs
+  Slowest single run: 17.94ms
+
+profile_nif (7 tests):
+  Average across all tests: 512.62ms
+  Fastest single run: 60.42ms
+  Slowest single run: 1.91s
+
+Overall:
+  Total tests run: 29
+  Average time per operation: 175.38ms
+

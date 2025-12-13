@@ -1,2 +1,6 @@
 _build
 deps/stream_data
+zig-cache/
+zig-out/
+.direnv
+deps
