@@ -2,19 +2,21 @@ defmodule FlashProfile.Atoms.Constant do
   @moduledoc """
   Factory for constant string atoms.
 
-  Constant atoms represent literal string patterns that match exactly the
+  **Constant atoms** represent literal string patterns that match exactly the
   specified string with no variation. They are useful for common separators,
   delimiters, and fixed prefixes/suffixes in data.
 
   ## Examples
 
-      iex> comma = FlashProfile.Atoms.Constant.new(",")
-      iex> prefixes = FlashProfile.Atoms.Constant.all_prefixes("Hello")
-      # Returns [const("H"), const("He"), const("Hel"), const("Hell"), const("Hello")]
+  ```elixir
+  iex> comma = FlashProfile.Atoms.Constant.new(",")
+  iex> prefixes = FlashProfile.Atoms.Constant.all_prefixes("Hello")
+  # Returns [const("H"), const("He"), const("Hel"), const("Hell"), const("Hello")]
 
-      iex> strings = ["test123", "test456", "test789"]
-      iex> lcp_atom = FlashProfile.Atoms.Constant.from_common_prefix(strings)
-      # Returns constant atoms for all prefixes of "test"
+  iex> strings = ["test123", "test456", "test789"]
+  iex> lcp_atom = FlashProfile.Atoms.Constant.from_common_prefix(strings)
+  # Returns constant atoms for all prefixes of "test"
+  ```
   """
 
   alias FlashProfile.Atom
@@ -24,7 +26,7 @@ defmodule FlashProfile.Atoms.Constant do
 
   ## Parameters
 
-    - `string` - A non-empty binary string
+  - `string` - A non-empty binary string
 
   ## Returns
 
@@ -32,11 +34,13 @@ defmodule FlashProfile.Atoms.Constant do
 
   ## Examples
 
-      iex> FlashProfile.Atoms.Constant.new(":")
-      %FlashProfile.Atom{type: :constant, value: ":", ...}
+  ```elixir
+  iex> FlashProfile.Atoms.Constant.new(":")
+  %FlashProfile.Atom{type: :constant, value: ":", ...}
 
-      iex> FlashProfile.Atoms.Constant.new("/")
-      %FlashProfile.Atom{type: :constant, value: "/", ...}
+  iex> FlashProfile.Atoms.Constant.new("/")
+  %FlashProfile.Atom{type: :constant, value: "/", ...}
+  ```
   """
   def new(string) when is_binary(string) and byte_size(string) > 0 do
     Atom.constant(string)
@@ -46,12 +50,12 @@ defmodule FlashProfile.Atoms.Constant do
   Create constant atoms for all prefixes of a string.
 
   Given a string, creates a list of constant atoms for each prefix of the string,
-  from length 1 to the full string length. This is useful for pattern learning
+  from length `1` to the full string length. This is useful for pattern learning
   where we want to explore different levels of specificity.
 
   ## Parameters
 
-    - `string` - A non-empty binary string
+  - `string` - A non-empty binary string
 
   ## Returns
 
@@ -60,15 +64,17 @@ defmodule FlashProfile.Atoms.Constant do
 
   ## Examples
 
-      iex> FlashProfile.Atoms.Constant.all_prefixes("ABC")
-      [
-        %FlashProfile.Atom{value: "A", ...},
-        %FlashProfile.Atom{value: "AB", ...},
-        %FlashProfile.Atom{value: "ABC", ...}
-      ]
+  ```elixir
+  iex> FlashProfile.Atoms.Constant.all_prefixes("ABC")
+  [
+    %FlashProfile.Atom{value: "A", ...},
+    %FlashProfile.Atom{value: "AB", ...},
+    %FlashProfile.Atom{value: "ABC", ...}
+  ]
 
-      iex> FlashProfile.Atoms.Constant.all_prefixes(":")
-      [%FlashProfile.Atom{value: ":", ...}]
+  iex> FlashProfile.Atoms.Constant.all_prefixes(":")
+  [%FlashProfile.Atom{value: ":", ...}]
+  ```
   """
   def all_prefixes(string) when is_binary(string) and byte_size(string) > 0 do
     string
@@ -80,13 +86,13 @@ defmodule FlashProfile.Atoms.Constant do
   @doc """
   Create constant atoms for all prefixes of the longest common prefix (LCP) of strings.
 
-  Finds the longest common prefix shared by all input strings, then creates
+  Finds the **longest common prefix** shared by all input strings, then creates
   constant atoms for all prefixes of that LCP. This is useful for identifying
   common patterns across a set of examples.
 
   ## Parameters
 
-    - `strings` - A non-empty list of binary strings
+  - `strings` - A non-empty list of binary strings
 
   ## Returns
 
@@ -95,24 +101,26 @@ defmodule FlashProfile.Atoms.Constant do
 
   ## Examples
 
-      iex> FlashProfile.Atoms.Constant.from_common_prefix(["test123", "test456", "test789"])
-      [
-        %FlashProfile.Atom{value: "t", ...},
-        %FlashProfile.Atom{value: "te", ...},
-        %FlashProfile.Atom{value: "tes", ...},
-        %FlashProfile.Atom{value: "test", ...}
-      ]
+  ```elixir
+  iex> FlashProfile.Atoms.Constant.from_common_prefix(["test123", "test456", "test789"])
+  [
+    %FlashProfile.Atom{value: "t", ...},
+    %FlashProfile.Atom{value: "te", ...},
+    %FlashProfile.Atom{value: "tes", ...},
+    %FlashProfile.Atom{value: "test", ...}
+  ]
 
-      iex> FlashProfile.Atoms.Constant.from_common_prefix(["abc", "def"])
-      []
+  iex> FlashProfile.Atoms.Constant.from_common_prefix(["abc", "def"])
+  []
 
-      iex> FlashProfile.Atoms.Constant.from_common_prefix(["same", "same", "same"])
-      [
-        %FlashProfile.Atom{value: "s", ...},
-        %FlashProfile.Atom{value: "sa", ...},
-        %FlashProfile.Atom{value: "sam", ...},
-        %FlashProfile.Atom{value: "same", ...}
-      ]
+  iex> FlashProfile.Atoms.Constant.from_common_prefix(["same", "same", "same"])
+  [
+    %FlashProfile.Atom{value: "s", ...},
+    %FlashProfile.Atom{value: "sa", ...},
+    %FlashProfile.Atom{value: "sam", ...},
+    %FlashProfile.Atom{value: "same", ...}
+  ]
+  ```
   """
   def from_common_prefix([]), do: []
   def from_common_prefix([string]), do: all_prefixes(string)

@@ -2,18 +2,18 @@ defmodule FlashProfile.Native do
   @moduledoc """
   Zigler NIF bindings to high-performance Zig implementation of FlashProfile.
 
-  This module provides low-level NIF functions for pattern matching and cost calculation.
+  This module provides **low-level NIF functions** for pattern matching and cost calculation.
   The Zig implementation provides significant performance improvements for:
   - Pattern matching (greedy left-to-right)
   - Cost calculation
   - Character class operations
-  - Profile and BigProfile algorithms
+  - `Profile` and `BigProfile` algorithms
   - Dissimilarity computation
 
   ## Usage
 
-  The functions in this module are called by the main FlashProfile API.
-  Direct usage is possible but the higher-level API is recommended.
+  The functions in this module are called by the main `FlashProfile` API.
+  Direct usage is possible but the **higher-level API is recommended**.
   """
 
   use Zig,
@@ -265,9 +265,9 @@ defmodule FlashProfile.Native do
   ## Parameters
 
   - `strings` - List of strings to profile
-  - `min_patterns` - Minimum number of patterns to extract (default: 1)
-  - `max_patterns` - Maximum number of patterns to extract (default: 10)
-  - `theta` - Threshold multiplier for hierarchy building (default: 1.25)
+  - `min_patterns` - Minimum number of patterns to extract (default: `1`)
+  - `max_patterns` - Maximum number of patterns to extract (default: `10`)
+  - `theta` - Threshold multiplier for hierarchy building (default: `1.25`)
 
   ## Returns
 
@@ -276,8 +276,10 @@ defmodule FlashProfile.Native do
 
   ## Examples
 
-      iex> FlashProfile.Native.profile(["PMC123", "PMC456", "PMC789"], 1, 5, 1.25)
-      {:ok, [%{pattern: ["PMC", "Digit"], cost: 12.3, indices: [0, 1, 2]}]}
+  ```elixir
+  iex> FlashProfile.Native.profile(["PMC123", "PMC456", "PMC789"], 1, 5, 1.25)
+  {:ok, [%{pattern: ["PMC", "Digit"], cost: 12.3, indices: [0, 1, 2]}]}
+  ```
   """
   @spec profile([String.t()], non_neg_integer(), non_neg_integer(), float()) ::
           {:ok, [profile_entry()]} | {:error, atom()}
@@ -290,15 +292,15 @@ defmodule FlashProfile.Native do
   @doc """
   BigProfile algorithm: extract patterns from large datasets.
 
-  Uses sampling and iterative profiling for scalability on large datasets.
+  Uses **sampling and iterative profiling** for scalability on large datasets.
 
   ## Parameters
 
   - `strings` - List of strings to profile
-  - `min_patterns` - Minimum number of patterns to extract (default: 1)
-  - `max_patterns` - Maximum number of patterns to extract (default: 10)
-  - `theta` - Threshold multiplier for hierarchy building (default: 1.25)
-  - `mu` - Sampling multiplier (sample size = mu * max_patterns, default: 4.0)
+  - `min_patterns` - Minimum number of patterns to extract (default: `1`)
+  - `max_patterns` - Maximum number of patterns to extract (default: `10`)
+  - `theta` - Threshold multiplier for hierarchy building (default: `1.25`)
+  - `mu` - Sampling multiplier (sample size = `mu * max_patterns`, default: `4.0`)
 
   ## Returns
 
@@ -307,8 +309,10 @@ defmodule FlashProfile.Native do
 
   ## Examples
 
-      iex> FlashProfile.Native.big_profile(large_dataset, 1, 10, 1.25, 4.0)
-      {:ok, [%{pattern: ["Lower", "Digit"], cost: 15.2, indices: [0, 5, 10]}]}
+  ```elixir
+  iex> FlashProfile.Native.big_profile(large_dataset, 1, 10, 1.25, 4.0)
+  {:ok, [%{pattern: ["Lower", "Digit"], cost: 15.2, indices: [0, 5, 10]}]}
+  ```
   """
   @spec big_profile([String.t()], non_neg_integer(), non_neg_integer(), float(), float()) ::
           {:ok, [profile_entry()]} | {:error, atom()}
@@ -321,7 +325,7 @@ defmodule FlashProfile.Native do
   @doc """
   Compute dissimilarity between two strings.
 
-  The dissimilarity is the cost of the pattern that matches both strings.
+  The **dissimilarity** is the cost of the pattern that matches both strings.
   Lower cost indicates more similarity.
 
   ## Parameters
@@ -336,11 +340,13 @@ defmodule FlashProfile.Native do
 
   ## Examples
 
-      iex> FlashProfile.Native.dissimilarity("PMC123", "PMC456")
-      {:ok, 12.3}
+  ```elixir
+  iex> FlashProfile.Native.dissimilarity("PMC123", "PMC456")
+  {:ok, 12.3}
 
-      iex> FlashProfile.Native.dissimilarity("abc", "123")
-      {:error, :no_pattern}
+  iex> FlashProfile.Native.dissimilarity("abc", "123")
+  {:error, :no_pattern}
+  ```
   """
   @spec dissimilarity(String.t(), String.t()) :: {:ok, float()} | {:error, atom()}
   def dissimilarity(string1, string2)
@@ -362,8 +368,10 @@ defmodule FlashProfile.Native do
 
   ## Examples
 
-      iex> FlashProfile.Native.learn_pattern(["abc", "def", "ghi"])
-      {:ok, {["Lower"], 9.1}}
+  ```elixir
+  iex> FlashProfile.Native.learn_pattern(["abc", "def", "ghi"])
+  {:ok, {["Lower"], 9.1}}
+  ```
   """
   @spec learn_pattern([String.t()]) :: {:ok, {[String.t()], float()}} | {:error, atom()}
   def learn_pattern(strings) when is_list(strings) do
@@ -385,11 +393,13 @@ defmodule FlashProfile.Native do
 
   ## Examples
 
-      iex> FlashProfile.Native.matches?(["Lower", "Digit"], "abc123")
-      true
+  ```elixir
+  iex> FlashProfile.Native.matches?(["Lower", "Digit"], "abc123")
+  true
 
-      iex> FlashProfile.Native.matches?(["Digit"], "abc")
-      false
+  iex> FlashProfile.Native.matches?(["Digit"], "abc")
+  false
+  ```
   """
   @spec matches?([String.t()], String.t()) :: boolean()
   def matches?(pattern_names, string)
@@ -413,11 +423,13 @@ defmodule FlashProfile.Native do
 
   ## Examples
 
-      iex> FlashProfile.Native.calculate_cost(["Lower"], ["abc", "def"])
-      {:ok, 9.1}
+  ```elixir
+  iex> FlashProfile.Native.calculate_cost(["Lower"], ["abc", "def"])
+  {:ok, 9.1}
 
-      iex> FlashProfile.Native.calculate_cost(["Digit"], ["abc"])
-      {:error, :no_match}
+  iex> FlashProfile.Native.calculate_cost(["Digit"], ["abc"])
+  {:error, :no_match}
+  ```
   """
   @spec calculate_cost([String.t()], [String.t()]) :: {:ok, float()} | {:error, atom()}
   def calculate_cost(pattern_names, strings)
@@ -432,7 +444,7 @@ defmodule FlashProfile.Native do
   @typedoc """
   A profile entry representing a pattern cluster.
 
-  - `pattern` - List of atom names (e.g., ["Lower", "Digit"])
+  - `pattern` - List of atom names (e.g., `["Lower", "Digit"]`)
   - `cost` - Cost of the pattern
   - `indices` - Indices of strings in the dataset that match this pattern
   """

@@ -2,58 +2,63 @@ defmodule FlashProfile.Atoms.Defaults do
   @moduledoc """
   Default set of atoms for FlashProfile.
 
-  Based on Figure 6 from the FlashProfile paper, this module provides the
-  standard collection of atoms used in pattern learning. The atoms are organized
-  by type and can be accessed individually or as categorized groups.
+  This module provides the **standard collection of atoms** used in pattern learning.
+  The atoms are organized by type and can be accessed individually or as categorized groups.
 
-  ## Paper Atoms (Figure 6)
+  > **Note:** These atoms are based on the FlashProfile research paper with some extensions.
 
-  The following atoms are defined in the paper:
-  - Lower, Upper, Digit, Bin, Hex, Alpha, AlphaDigit, Space, DotDash,
-  - Punct, AlphaDash, Symb, Base64, Any
+  ## Standard Atoms
 
-  ## Extensions (not in paper)
+  The following atoms are from the research paper:
+  - `Lower`, `Upper`, `Digit`, `Bin`, `Hex`, `Alpha`, `AlphaDigit`, `Space`, `DotDash`,
+  `Punct`, `AlphaDash`, `Symb`, `Base64`, `Any`
 
-  This implementation includes additional atoms beyond Figure 6:
-  - **AlphaDigitSpace**: [a-zA-Z0-9\\s] - alphanumeric with whitespace
-  - **AlphaSpace**: [a-zA-Z\\s] - alphabetic with whitespace
-  - **TitleCaseWord**: [A-Z][a-z]+ - title case words (regex-based)
+  ## Extensions
+
+  This implementation includes additional atoms:
+  - **`AlphaDigitSpace`**: `[a-zA-Z0-9\\s]` - alphanumeric with whitespace
+  - **`AlphaSpace`**: `[a-zA-Z\\s]` - alphabetic with whitespace
+  - **`TitleCaseWord`**: `[A-Z][a-z]+` - title case words (regex-based)
 
   ## Default Atoms
 
-  The following atoms are included:
+  The following **17 atoms** are included:
 
   ### Character Classes
-  - Lower: lowercase letters [a-z]
-  - Upper: uppercase letters [A-Z]
-  - Digit: decimal digits [0-9]
-  - Bin: binary digits [01]
-  - Hex: hexadecimal digits [0-9a-fA-F]
-  - Alpha: alphabetic characters [a-zA-Z]
-  - AlphaDigit: alphanumeric [a-zA-Z0-9]
-  - Space: whitespace characters
-  - AlphaDigitSpace: alphanumeric and whitespace (extension)
-  - DotDash: dot and dash [.-]
-  - Punct: common punctuation [.,:?/-]
-  - AlphaDash: alphabetic and dash [a-zA-Z-]
-  - Symb: symbol characters
-  - AlphaSpace: alphabetic and whitespace (extension)
-  - Base64: Base64 characters [a-zA-Z0-9+=]
-  - Any: any printable character
+
+  - `Lower`: lowercase letters `[a-z]`
+  - `Upper`: uppercase letters `[A-Z]`
+  - `Digit`: decimal digits `[0-9]`
+  - `Bin`: binary digits `[01]`
+  - `Hex`: hexadecimal digits `[0-9a-fA-F]`
+  - `Alpha`: alphabetic characters `[a-zA-Z]`
+  - `AlphaDigit`: alphanumeric `[a-zA-Z0-9]`
+  - `Space`: whitespace characters
+  - `AlphaDigitSpace`: alphanumeric and whitespace *(extension)*
+  - `DotDash`: dot and dash `[.-]`
+  - `Punct`: common punctuation `[.,:?/-]`
+  - `AlphaDash`: alphabetic and dash `[a-zA-Z-]`
+  - `Symb`: symbol characters
+  - `AlphaSpace`: alphabetic and whitespace *(extension)*
+  - `Base64`: Base64 characters `[a-zA-Z0-9+=]`
+  - `Any`: any printable character
 
   ### Regex Patterns
-  - TitleCaseWord: uppercase letter followed by lowercase letters (extension)
+
+  - `TitleCaseWord`: uppercase letter followed by lowercase letters *(extension)*
 
   ## Examples
 
-      iex> all_atoms = FlashProfile.Atoms.Defaults.all()
-      iex> length(all_atoms)
-      17
+  ```elixir
+  iex> all_atoms = FlashProfile.Atoms.Defaults.all()
+  iex> length(all_atoms)
+  17
 
-      iex> letters = FlashProfile.Atoms.Defaults.letters()
-      iex> digits = FlashProfile.Atoms.Defaults.digits()
+  iex> letters = FlashProfile.Atoms.Defaults.letters()
+  iex> digits = FlashProfile.Atoms.Defaults.digits()
 
-      iex> lower = FlashProfile.Atoms.Defaults.get("Lower")
+  iex> lower = FlashProfile.Atoms.Defaults.get("Lower")
+  ```
   """
 
   alias FlashProfile.Atoms.{CharClass, Regex}
@@ -61,7 +66,7 @@ defmodule FlashProfile.Atoms.Defaults do
   @doc """
   Get all default atoms as a list.
 
-  Returns the complete set of 17 default atoms defined in the FlashProfile paper.
+  Returns the complete set of **17 default atoms**.
 
   ## Returns
 
@@ -69,11 +74,13 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Examples
 
-      iex> atoms = FlashProfile.Atoms.Defaults.all()
-      iex> Enum.map(atoms, & &1.name)
-      ["Lower", "Upper", "Digit", "Bin", "Hex", "Alpha", "AlphaDigit",
-       "Space", "AlphaDigitSpace", "DotDash", "Punct", "AlphaDash",
-       "Symb", "AlphaSpace", "Base64", "Any", "TitleCaseWord"]
+  ```elixir
+  iex> atoms = FlashProfile.Atoms.Defaults.all()
+  iex> Enum.map(atoms, & &1.name)
+  ["Lower", "Upper", "Digit", "Bin", "Hex", "Alpha", "AlphaDigit",
+   "Space", "AlphaDigitSpace", "DotDash", "Punct", "AlphaDash",
+   "Symb", "AlphaSpace", "Base64", "Any", "TitleCaseWord"]
+  ```
   """
   def all() do
     [
@@ -100,7 +107,7 @@ defmodule FlashProfile.Atoms.Defaults do
   @doc """
   Get letter-related atoms.
 
-  Returns atoms that match letters: Lower, Upper, and Alpha.
+  Returns atoms that match letters: `Lower`, `Upper`, and `Alpha`.
 
   ## Returns
 
@@ -108,9 +115,11 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Examples
 
-      iex> letters = FlashProfile.Atoms.Defaults.letters()
-      iex> Enum.map(letters, & &1.name)
-      ["Lower", "Upper", "Alpha"]
+  ```elixir
+  iex> letters = FlashProfile.Atoms.Defaults.letters()
+  iex> Enum.map(letters, & &1.name)
+  ["Lower", "Upper", "Alpha"]
+  ```
   """
   def letters() do
     [
@@ -123,7 +132,7 @@ defmodule FlashProfile.Atoms.Defaults do
   @doc """
   Get digit-related atoms.
 
-  Returns atoms that match numeric digits: Digit, Bin, and Hex.
+  Returns atoms that match numeric digits: `Digit`, `Bin`, and `Hex`.
 
   ## Returns
 
@@ -131,9 +140,11 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Examples
 
-      iex> digits = FlashProfile.Atoms.Defaults.digits()
-      iex> Enum.map(digits, & &1.name)
-      ["Digit", "Bin", "Hex"]
+  ```elixir
+  iex> digits = FlashProfile.Atoms.Defaults.digits()
+  iex> Enum.map(digits, & &1.name)
+  ["Digit", "Bin", "Hex"]
+  ```
   """
   def digits() do
     [
@@ -150,13 +161,15 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Returns
 
-  A list containing the Space atom.
+  A list containing the `Space` atom.
 
   ## Examples
 
-      iex> ws = FlashProfile.Atoms.Defaults.whitespace()
-      iex> Enum.map(ws, & &1.name)
-      ["Space"]
+  ```elixir
+  iex> ws = FlashProfile.Atoms.Defaults.whitespace()
+  iex> Enum.map(ws, & &1.name)
+  ["Space"]
+  ```
   """
   def whitespace() do
     [CharClass.space()]
@@ -165,7 +178,7 @@ defmodule FlashProfile.Atoms.Defaults do
   @doc """
   Get punctuation-related atoms.
 
-  Returns atoms that match punctuation and symbols: DotDash, Punct, and Symb.
+  Returns atoms that match punctuation and symbols: `DotDash`, `Punct`, and `Symb`.
 
   ## Returns
 
@@ -173,9 +186,11 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Examples
 
-      iex> punct = FlashProfile.Atoms.Defaults.punctuation()
-      iex> Enum.map(punct, & &1.name)
-      ["DotDash", "Punct", "Symb"]
+  ```elixir
+  iex> punct = FlashProfile.Atoms.Defaults.punctuation()
+  iex> Enum.map(punct, & &1.name)
+  ["DotDash", "Punct", "Symb"]
+  ```
   """
   def punctuation() do
     [
@@ -189,7 +204,7 @@ defmodule FlashProfile.Atoms.Defaults do
   Get mixed character class atoms.
 
   Returns atoms that match combinations of character types:
-  AlphaDigit, AlphaDigitSpace, and Base64.
+  `AlphaDigit`, `AlphaDigitSpace`, and `Base64`.
 
   ## Returns
 
@@ -197,9 +212,11 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Examples
 
-      iex> mixed = FlashProfile.Atoms.Defaults.mixed()
-      iex> Enum.map(mixed, & &1.name)
-      ["AlphaDigit", "AlphaDigitSpace", "Base64"]
+  ```elixir
+  iex> mixed = FlashProfile.Atoms.Defaults.mixed()
+  iex> Enum.map(mixed, & &1.name)
+  ["AlphaDigit", "AlphaDigitSpace", "Base64"]
+  ```
   """
   def mixed() do
     [
@@ -216,7 +233,7 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Parameters
 
-    - `name` - The name of the atom to retrieve (e.g., "Lower", "Digit")
+  - `name` - The name of the atom to retrieve (e.g., `"Lower"`, `"Digit"`)
 
   ## Returns
 
@@ -224,14 +241,16 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Examples
 
-      iex> FlashProfile.Atoms.Defaults.get("Lower")
-      %FlashProfile.Atom{name: "Lower", ...}
+  ```elixir
+  iex> FlashProfile.Atoms.Defaults.get("Lower")
+  %FlashProfile.Atom{name: "Lower", ...}
 
-      iex> FlashProfile.Atoms.Defaults.get("Digit")
-      %FlashProfile.Atom{name: "Digit", ...}
+  iex> FlashProfile.Atoms.Defaults.get("Digit")
+  %FlashProfile.Atom{name: "Digit", ...}
 
-      iex> FlashProfile.Atoms.Defaults.get("NonExistent")
-      nil
+  iex> FlashProfile.Atoms.Defaults.get("NonExistent")
+  nil
+  ```
   """
   def get(name) when is_binary(name) do
     Enum.find(all(), fn atom -> atom.name == name end)
@@ -248,10 +267,12 @@ defmodule FlashProfile.Atoms.Defaults do
 
   ## Examples
 
-      iex> FlashProfile.Atoms.Defaults.atom_names()
-      ["Lower", "Upper", "Digit", "Bin", "Hex", "Alpha", "AlphaDigit",
-       "Space", "AlphaDigitSpace", "DotDash", "Punct", "AlphaDash",
-       "Symb", "AlphaSpace", "Base64", "Any", "TitleCaseWord"]
+  ```elixir
+  iex> FlashProfile.Atoms.Defaults.atom_names()
+  ["Lower", "Upper", "Digit", "Bin", "Hex", "Alpha", "AlphaDigit",
+   "Space", "AlphaDigitSpace", "DotDash", "Punct", "AlphaDash",
+   "Symb", "AlphaSpace", "Base64", "Any", "TitleCaseWord"]
+  ```
   """
   def atom_names() do
     [

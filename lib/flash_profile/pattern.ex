@@ -2,42 +2,45 @@ defmodule FlashProfile.Pattern do
   @moduledoc """
   Implementation of patterns for FlashProfile.
 
-  A pattern is simply a sequence of atoms. From the paper (Definition 4.3):
-  "A pattern is simply a sequence of atoms. The pattern Empty denotes an empty
-  sequence, which only matches the empty string ε. We use the concatenation
-  operator ◇ for sequencing atoms."
+  A **pattern** is simply a sequence of atoms. The pattern `Empty` denotes an empty
+  sequence, which only matches the empty string `ε`. We use the concatenation
+  operator `◇` for sequencing atoms.
 
-  Pattern P describes string s iff:
-  - s ≠ ε (non-empty) OR s = ε and P is empty
-  - ∀i ∈ {1,...,k}: αi(si) > 0 (each atom matches a non-empty prefix)
-  - sk+1 = ε (entire string consumed)
+  ## Pattern Matching Rules
 
-  Where s1 = s and si+1 = si[αi(si):] (remaining suffix after matching atom αi)
+  Pattern `P` describes string `s` iff:
+  - `s ≠ ε` (non-empty) OR `s = ε` and `P` is empty
+  - `∀i ∈ {1,...,k}: αi(si) > 0` (each atom matches a non-empty prefix)
+  - `sk+1 = ε` (entire string consumed)
+
+  Where `s1 = s` and `si+1 = si[αi(si):]` (remaining suffix after matching atom `αi`)
 
   ## Matching Algorithm
 
-  Patterns match greedily from left to right:
-  1. Start at position 0 of the string
+  Patterns match **greedily from left to right**:
+  1. Start at position `0` of the string
   2. For each atom in order:
-     - Call atom.match(remaining_string)
-     - If result is 0, pattern doesn't match
+     - Call `atom.match(remaining_string)`
+     - If result is `0`, pattern doesn't match
      - Otherwise, consume that many characters and continue
   3. After all atoms, check if entire string is consumed
 
   ## Examples
 
-      iex> alias FlashProfile.{Pattern, Atom}
-      iex> alias FlashProfile.Atoms.CharClass
-      iex> digit = CharClass.digit()
-      iex> upper = CharClass.upper()
-      iex> dash = Atom.constant("-")
-      iex> pattern = [upper, dash, digit]
-      iex> Pattern.matches?(pattern, "A-123")
-      true
-      iex> Pattern.matches?(pattern, "AB-123")
-      true
-      iex> Pattern.matches?(pattern, "A-")
-      false
+  ```elixir
+  iex> alias FlashProfile.{Pattern, Atom}
+  iex> alias FlashProfile.Atoms.CharClass
+  iex> digit = CharClass.digit()
+  iex> upper = CharClass.upper()
+  iex> dash = Atom.constant("-")
+  iex> pattern = [upper, dash, digit]
+  iex> Pattern.matches?(pattern, "A-123")
+  true
+  iex> Pattern.matches?(pattern, "AB-123")
+  true
+  iex> Pattern.matches?(pattern, "A-")
+  false
+  ```
   """
 
   alias FlashProfile.Atom
@@ -58,24 +61,26 @@ defmodule FlashProfile.Pattern do
   @doc """
   Check if a pattern matches a string entirely.
 
-  Returns true if the pattern describes the string. An empty pattern []
-  only matches empty string "". Each atom must match a non-empty prefix,
+  Returns `true` if the pattern describes the string. An empty pattern `[]`
+  only matches empty string `""`. Each atom must match a non-empty prefix,
   and together they must consume the entire string.
 
   ## Examples
 
-      iex> alias FlashProfile.{Pattern, Atom}
-      iex> alias FlashProfile.Atoms.CharClass
-      iex> digit = CharClass.digit()
-      iex> pattern = [digit]
-      iex> Pattern.matches?(pattern, "123")
-      true
-      iex> Pattern.matches?(pattern, "123abc")
-      false
-      iex> Pattern.matches?([], "")
-      true
-      iex> Pattern.matches?([], "abc")
-      false
+  ```elixir
+  iex> alias FlashProfile.{Pattern, Atom}
+  iex> alias FlashProfile.Atoms.CharClass
+  iex> digit = CharClass.digit()
+  iex> pattern = [digit]
+  iex> Pattern.matches?(pattern, "123")
+  true
+  iex> Pattern.matches?(pattern, "123abc")
+  false
+  iex> Pattern.matches?([], "")
+  true
+  iex> Pattern.matches?([], "abc")
+  false
+  ```
   """
   @spec matches?(t(), String.t()) :: boolean()
   def matches?(pattern, string) when is_list(pattern) and is_binary(string) do
@@ -88,22 +93,24 @@ defmodule FlashProfile.Pattern do
   @doc """
   Match a pattern against a string, returning match details.
 
-  Returns {:ok, matches} with list of {atom, matched_substring, start_pos, length}
-  or {:error, :no_match} if pattern doesn't match.
+  Returns `{:ok, matches}` with list of `{atom, matched_substring, start_pos, length}`
+  or `{:error, :no_match}` if pattern doesn't match.
 
   ## Examples
 
-      iex> alias FlashProfile.{Pattern, Atom}
-      iex> alias FlashProfile.Atoms.CharClass
-      iex> digit = CharClass.digit()
-      iex> upper = CharClass.upper()
-      iex> dash = Atom.constant("-")
-      iex> pattern = [upper, dash, digit]
-      iex> {:ok, matches} = Pattern.match(pattern, "A-123")
-      iex> length(matches)
-      3
-      iex> Pattern.match(pattern, "invalid")
-      {:error, :no_match}
+  ```elixir
+  iex> alias FlashProfile.{Pattern, Atom}
+  iex> alias FlashProfile.Atoms.CharClass
+  iex> digit = CharClass.digit()
+  iex> upper = CharClass.upper()
+  iex> dash = Atom.constant("-")
+  iex> pattern = [upper, dash, digit]
+  iex> {:ok, matches} = Pattern.match(pattern, "A-123")
+  iex> length(matches)
+  3
+  iex> Pattern.match(pattern, "invalid")
+  {:error, :no_match}
+  ```
   """
   @spec match(t(), String.t()) ::
           {:ok, list({Atom.t(), String.t(), non_neg_integer(), non_neg_integer()})}
@@ -115,20 +122,22 @@ defmodule FlashProfile.Pattern do
   @doc """
   Get the lengths matched by each atom for a string.
 
-  Returns list of lengths, or nil if pattern doesn't match.
+  Returns list of lengths, or `nil` if pattern doesn't match.
   Used for cost calculation.
 
   ## Examples
 
-      iex> alias FlashProfile.{Pattern, Atom}
-      iex> alias FlashProfile.Atoms.CharClass
-      iex> digit = CharClass.digit()
-      iex> upper = CharClass.upper()
-      iex> pattern = [upper, digit]
-      iex> Pattern.match_lengths(pattern, "A123")
-      [1, 3]
-      iex> Pattern.match_lengths(pattern, "invalid")
-      nil
+  ```elixir
+  iex> alias FlashProfile.{Pattern, Atom}
+  iex> alias FlashProfile.Atoms.CharClass
+  iex> digit = CharClass.digit()
+  iex> upper = CharClass.upper()
+  iex> pattern = [upper, digit]
+  iex> Pattern.match_lengths(pattern, "A123")
+  [1, 3]
+  iex> Pattern.match_lengths(pattern, "invalid")
+  nil
+  ```
   """
   @spec match_lengths(t(), String.t()) :: [non_neg_integer()] | nil
   def match_lengths(pattern, string) when is_list(pattern) and is_binary(string) do
@@ -147,21 +156,23 @@ defmodule FlashProfile.Pattern do
 
   ## Display Format
 
-  - Constant strings: in quotes, e.g., "PMC"
-  - Fixed-width char class: Name×N, e.g., Digit×4
-  - Variable-width char class: Name+, e.g., Lower+
-  - Atoms separated by ◇
+  - Constant strings: in quotes, e.g., `"PMC"`
+  - Fixed-width char class: `Name×N`, e.g., `Digit×4`
+  - Variable-width char class: `Name+`, e.g., `Lower+`
+  - Atoms separated by `◇`
 
   ## Examples
 
-      iex> alias FlashProfile.{Pattern, Atom}
-      iex> alias FlashProfile.Atoms.CharClass
-      iex> digit = CharClass.digit()
-      iex> upper = CharClass.upper()
-      iex> dash = Atom.constant("-")
-      iex> pattern = [upper, dash, digit]
-      iex> Pattern.to_string(pattern)
-      "Upper+ ◇ \\"-\\" ◇ Digit+"
+  ```elixir
+  iex> alias FlashProfile.{Pattern, Atom}
+  iex> alias FlashProfile.Atoms.CharClass
+  iex> digit = CharClass.digit()
+  iex> upper = CharClass.upper()
+  iex> dash = Atom.constant("-")
+  iex> pattern = [upper, dash, digit]
+  iex> Pattern.to_string(pattern)
+  "Upper+ ◇ \\"-\\" ◇ Digit+"
+  ```
   """
   @spec to_string(t()) :: String.t()
   def to_string(pattern) when is_list(pattern) do

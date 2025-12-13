@@ -30,7 +30,11 @@
       "Bash(tree:*)",
       "Bash(sort:*)",
       "Bash(timeout 90 mix test:*)",
-      "Bash(scripts/check-zig.sh:*)"
+      "Bash(scripts/check-zig.sh:*)",
+      "Bash(git describe:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(mix docs:*)",
+      "Bash(mix ci:*)"
     ],
     "deny": [],
     "ask": []
