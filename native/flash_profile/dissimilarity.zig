@@ -142,9 +142,10 @@ pub fn computeDissimilarity(
     s1: []const u8,
     s2: []const u8,
     atoms: []const Atom,
+    cache: ?*learner_mod.PatternCache,
     allocator: Allocator,
 ) !f64 {
-    const result = try computeDissimilarityWithPattern(s1, s2, atoms, allocator);
+    const result = try computeDissimilarityWithPattern(s1, s2, atoms, cache, allocator);
     if (result.pattern) |p| {
         allocator.free(p);
     }
@@ -164,6 +165,7 @@ pub fn computeDissimilarityWithPattern(
     s1: []const u8,
     s2: []const u8,
     atoms: []const Atom,
+    cache: ?*learner_mod.PatternCache,
     allocator: Allocator,
 ) !DissimilarityResult {
     // Optimization: identical strings have zero dissimilarity
@@ -173,7 +175,7 @@ pub fn computeDissimilarityWithPattern(
 
     const strings = [_][]const u8{ s1, s2 };
 
-    const result = try learner_mod.learnBestPattern(&strings, atoms, allocator);
+    const result = try learner_mod.learnBestPattern(&strings, atoms, cache, allocator);
 
     if (result) |r| {
         // Return the pattern without deinit - caller takes ownership
@@ -194,6 +196,7 @@ fn computeDissimilarityWithCache(
     s2: []const u8,
     cached_patterns: []const CachedPattern,
     atoms: []const Atom,
+    cache: ?*learner_mod.PatternCache,
     allocator: Allocator,
 ) !DissimilarityResult {
     // Fast path: identical strings
@@ -229,7 +232,7 @@ fn computeDissimilarityWithCache(
     }
 
     // No cached pattern worked, do full pattern learning
-    return computeDissimilarityWithPattern(s1, s2, atoms, allocator);
+    return computeDissimilarityWithPattern(s1, s2, atoms, cache, allocator);
 }
 
 /// Sample dissimilarities from a dataset.
@@ -260,6 +263,7 @@ pub fn sampleDissimilarities(
     strings: []const []const u8,
     M_hat: usize,
     atoms: []const Atom,
+    cache: ?*learner_mod.PatternCache,
     allocator: Allocator,
 ) !SampleResult {
     const n = strings.len;
@@ -318,15 +322,16 @@ pub fn sampleDissimilarities(
             j: usize,
             strings_ref: []const []const u8,
             atoms_ref: []const Atom,
-            cache: *std.AutoHashMap(CacheKey, f64),
+            diss_cache: *std.AutoHashMap(CacheKey, f64),
             patterns: *std.ArrayList(CachedPattern),
+            pattern_cache: ?*learner_mod.PatternCache,
             alloc: Allocator,
         ) !f64 {
             // Normalize key so i < j
             const key = if (i < j) CacheKey{ .a = i, .b = j } else CacheKey{ .a = j, .b = i };
 
             // Check cache first
-            if (cache.get(key)) |cached| {
+            if (diss_cache.get(key)) |cached| {
                 return cached;
             }
 
@@ -335,6 +340,7 @@ pub fn sampleDissimilarities(
                 strings_ref[i],
                 strings_ref[j],
                 atoms_ref,
+                pattern_cache,
                 alloc,
             );
 
@@ -343,7 +349,7 @@ pub fn sampleDissimilarities(
                 try patterns.append(alloc, CachedPattern{ .atoms = p, .cost = result.cost });
             }
 
-            try cache.put(key, result.cost);
+            try diss_cache.put(key, result.cost);
             return result.cost;
         }
     }.call;
@@ -373,6 +379,7 @@ pub fn sampleDissimilarities(
                     atoms,
                     &dissim_cache,
                     &collected_patterns,
+                    cache,
                     allocator,
                 );
 
@@ -406,6 +413,7 @@ pub fn sampleDissimilarities(
                 atoms,
                 &dissim_cache,
                 &collected_patterns,
+                cache,
                 allocator,
             );
             matrix.set(i, j, dissim);
@@ -451,6 +459,7 @@ pub fn buildApproxMatrix(
     strings: []const []const u8,
     sample: SampleResult,
     atoms: []const Atom,
+    cache: ?*learner_mod.PatternCache,
     allocator: Allocator,
 ) !DissimilarityMatrix {
     const n = strings.len;
@@ -491,6 +500,7 @@ pub fn buildApproxMatrix(
                     strings[j],
                     sample.patterns.items,
                     atoms,
+                    cache,
                     allocator,
                 );
                 // Free pattern if allocated (we don't collect more patterns here)
@@ -518,7 +528,7 @@ test "dissimilarity: identical strings" {
     const d = atom_mod.digit();
     const atoms = [_]Atom{d};
 
-    const dissim = try computeDissimilarity("123", "123", &atoms, allocator);
+    const dissim = try computeDissimilarity("123", "123", &atoms, null, allocator);
 
     // Identical strings should have zero dissimilarity (Definition 3.1)
     try testing.expectEqual(@as(f64, 0.0), dissim);
@@ -532,7 +542,7 @@ test "dissimilarity: different strings" {
     const u = atom_mod.upper();
     const atoms = [_]Atom{ d, u };
 
-    const dissim = try computeDissimilarity("123", "456", &atoms, allocator);
+    const dissim = try computeDissimilarity("123", "456", &atoms, null, allocator);
 
     // Different strings should still have finite dissimilarity if pattern exists
     try testing.expect(dissim < std.math.inf(f64));
@@ -546,7 +556,7 @@ test "dissimilarity: incompatible strings" {
     const d = atom_mod.digit();
     const atoms = [_]Atom{d};
 
-    const dissim = try computeDissimilarity("123", "abc", &atoms, allocator);
+    const dissim = try computeDissimilarity("123", "abc", &atoms, null, allocator);
 
     // Incompatible strings (no common pattern) should have infinite dissimilarity
     try testing.expect(dissim == std.math.inf(f64));
@@ -601,7 +611,7 @@ test "sample dissimilarities: empty dataset" {
     const atoms = [_]Atom{d};
     const strings = [_][]const u8{};
 
-    var result = try sampleDissimilarities(&strings, 0, &atoms, allocator);
+    var result = try sampleDissimilarities(&strings, 0, &atoms, null, allocator);
     defer result.deinit();
 
     try testing.expectEqual(@as(usize, 0), result.indices.len);
@@ -616,7 +626,7 @@ test "sample dissimilarities: single string" {
     const atoms = [_]Atom{d};
     const strings = [_][]const u8{"123"};
 
-    var result = try sampleDissimilarities(&strings, 1, &atoms, allocator);
+    var result = try sampleDissimilarities(&strings, 1, &atoms, null, allocator);
     defer result.deinit();
 
     try testing.expectEqual(@as(usize, 1), result.indices.len);
@@ -633,7 +643,7 @@ test "sample dissimilarities: multiple strings" {
 
     const strings = [_][]const u8{ "123", "456", "789", "ABC" };
 
-    var result = try sampleDissimilarities(&strings, 3, &atoms, allocator);
+    var result = try sampleDissimilarities(&strings, 3, &atoms, null, allocator);
     defer result.deinit();
 
     // Should select 3 samples
@@ -656,7 +666,7 @@ test "sample dissimilarities: M_hat larger than dataset" {
     const strings = [_][]const u8{ "123", "456" };
 
     // Request 10 samples from 2 strings - should cap at 2
-    var result = try sampleDissimilarities(&strings, 10, &atoms, allocator);
+    var result = try sampleDissimilarities(&strings, 10, &atoms, null, allocator);
     defer result.deinit();
 
     try testing.expectEqual(@as(usize, 2), result.indices.len);
@@ -672,11 +682,11 @@ test "build approx matrix: uses cached samples" {
     const strings = [_][]const u8{ "111", "222", "333", "444" };
 
     // Sample 2 strings
-    var sample = try sampleDissimilarities(&strings, 2, &atoms, allocator);
+    var sample = try sampleDissimilarities(&strings, 2, &atoms, null, allocator);
     defer sample.deinit();
 
     // Build full matrix using samples
-    var matrix = try buildApproxMatrix(&strings, sample, &atoms, allocator);
+    var matrix = try buildApproxMatrix(&strings, sample, &atoms, null, allocator);
     defer matrix.deinit();
 
     // Matrix should have n=4
@@ -703,11 +713,11 @@ test "build approx matrix: empty sample" {
     const strings = [_][]const u8{ "111", "222" };
 
     // Empty sample
-    var sample = try sampleDissimilarities(&strings, 0, &atoms, allocator);
+    var sample = try sampleDissimilarities(&strings, 0, &atoms, null, allocator);
     defer sample.deinit();
 
     // Build full matrix - should compute all fresh
-    var matrix = try buildApproxMatrix(&strings, sample, &atoms, allocator);
+    var matrix = try buildApproxMatrix(&strings, sample, &atoms, null, allocator);
     defer matrix.deinit();
 
     try testing.expectEqual(@as(usize, 2), matrix.n);

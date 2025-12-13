@@ -169,7 +169,7 @@ pub fn patternSimilarity(
     defer allocator.free(combined_strings);
 
     // Learn best pattern for combined data
-    const result = try learner_mod.learnBestPattern(combined_strings, atoms, allocator);
+    const result = try learner_mod.learnBestPattern(combined_strings, atoms, null, allocator);
     defer if (result) |*r| {
         var mut_r = r.*;
         mut_r.deinit();
@@ -209,7 +209,7 @@ pub fn mergeEntries(
     defer allocator.free(combined_strings);
 
     // Learn best pattern for combined data
-    const learn_result = try learner_mod.learnBestPattern(combined_strings, atoms, allocator);
+    const learn_result = try learner_mod.learnBestPattern(combined_strings, atoms, null, allocator);
 
     if (learn_result) |result| {
         defer {

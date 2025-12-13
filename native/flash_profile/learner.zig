@@ -27,6 +27,131 @@ pub const LearnResult = struct {
     }
 };
 
+/// Cached pattern result for reuse across multiple learnBestPattern calls
+pub const CachedPatternResult = struct {
+    pattern: []const Atom,
+    cost: f64,
+};
+
+/// Persistent pattern cache that survives across multiple learnBestPattern calls
+pub const PatternCache = struct {
+    /// HashMap from string pair hash to learned pattern
+    cache: std.AutoHashMap(u128, CachedPatternResult),
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator) PatternCache {
+        return .{
+            .cache = std.AutoHashMap(u128, CachedPatternResult).init(allocator),
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *PatternCache) void {
+        var iter = self.cache.iterator();
+        while (iter.next()) |entry| {
+            self.allocator.free(entry.value_ptr.pattern);
+        }
+        self.cache.deinit();
+    }
+
+    /// Create cache key for a set of strings
+    fn makeCacheKey(strings: []const []const u8) u128 {
+        var hasher = std.hash.Wyhash.init(0x9e3779b97f4a7c15);
+
+        // Hash count first
+        const count = strings.len;
+        hasher.update(std.mem.asBytes(&count));
+
+        // Hash each string
+        for (strings) |s| {
+            const len = s.len;
+            hasher.update(std.mem.asBytes(&len));
+            hasher.update(s);
+        }
+
+        // Create 128-bit hash
+        const h1 = hasher.final();
+
+        var hasher2 = std.hash.Wyhash.init(0x517cc1b727220a95);
+        hasher2.update(std.mem.asBytes(&count));
+        for (strings) |s| {
+            const len = s.len;
+            hasher2.update(std.mem.asBytes(&len));
+            hasher2.update(s);
+        }
+        const h2 = hasher2.final();
+
+        return (@as(u128, h1) << 64) | @as(u128, h2);
+    }
+
+    /// Try to get cached pattern for strings (exact match)
+    pub fn get(self: *PatternCache, strings: []const []const u8) ?CachedPatternResult {
+        const key = makeCacheKey(strings);
+        return self.cache.get(key);
+    }
+
+    /// Try to find any cached pattern that matches all the given strings
+    /// This is slower than exact get() but allows reusing patterns across different string sets
+    /// OPTIMIZATION: Only check first 20 cached patterns to avoid O(N^2) behavior
+    pub fn findMatchingPattern(self: *PatternCache, strings: []const []const u8, allocator: Allocator) !?CachedPatternResult {
+        // Skip if cache is getting too large (avoid O(N^2) overhead)
+        const MAX_PATTERNS_TO_CHECK = 20;
+        if (self.cache.count() > MAX_PATTERNS_TO_CHECK) {
+            return null;
+        }
+
+        var best_cost: f64 = std.math.inf(f64);
+        var best_pattern: ?[]const Atom = null;
+
+        // Try all cached patterns (limited by MAX_PATTERNS_TO_CHECK check above)
+        var iter = self.cache.iterator();
+        while (iter.next()) |entry| {
+            const cached = entry.value_ptr.*;
+            const pattern = pattern_mod.Pattern.init(cached.pattern);
+
+            // Check if this pattern matches all input strings
+            var matches_all = true;
+            for (strings) |s| {
+                if (!pattern.matches(s)) {
+                    matches_all = false;
+                    break;
+                }
+            }
+
+            if (matches_all) {
+                // Pattern matches! Calculate cost for this specific set
+                const cost = try cost_mod.calculateCost(cached.pattern, strings, allocator);
+
+                if (cost == .finite and cost.finite < best_cost) {
+                    best_cost = cost.finite;
+                    best_pattern = cached.pattern;
+                }
+            }
+        }
+
+        if (best_pattern != null) {
+            return CachedPatternResult{ .pattern = best_pattern.?, .cost = best_cost };
+        }
+
+        return null;
+    }
+
+    /// Store pattern for strings
+    pub fn put(self: *PatternCache, strings: []const []const u8, pattern: []const Atom, cost: f64) !void {
+        const key = makeCacheKey(strings);
+
+        // Check if already exists
+        if (self.cache.get(key)) |_| {
+            // Already cached, don't duplicate
+            return;
+        }
+
+        // Make a copy of the pattern
+        const pattern_copy = try self.allocator.dupe(Atom, pattern);
+        try self.cache.put(key, .{ .pattern = pattern_copy, .cost = cost });
+    }
+};
+
 /// Learn the best (lowest cost) pattern for a set of strings
 ///
 /// Implements the LearnBestPattern algorithm from the FlashProfile paper (Figure 7):
@@ -44,10 +169,12 @@ pub const LearnResult = struct {
 /// Parameters:
 /// - strings: List of strings to learn a pattern from
 /// - atoms: List of atoms to use in pattern synthesis
+/// - cache: Optional persistent cache for pattern reuse
 /// - allocator: Memory allocator
 pub fn learnBestPattern(
     strings: []const []const u8,
     atoms: []const Atom,
+    cache: ?*PatternCache,
     allocator: Allocator,
 ) !?LearnResult {
     // Edge case: empty dataset - return empty pattern with zero cost
@@ -58,6 +185,33 @@ pub fn learnBestPattern(
             .cost = 0.0,
             .allocator = allocator,
         };
+    }
+
+    // OPTIMIZATION: Check cache first - exact match
+    if (cache) |c| {
+        if (c.get(strings)) |cached| {
+            const pattern_copy = try allocator.dupe(Atom, cached.pattern);
+            return LearnResult{
+                .pattern = pattern_copy,
+                .cost = cached.cost,
+                .allocator = allocator,
+            };
+        }
+
+        // OPTIMIZATION: For small caches, try to find matching pattern
+        // This helps when many string pairs match the same pattern
+        if (c.cache.count() <= 10) {
+            if (try c.findMatchingPattern(strings, allocator)) |cached| {
+                const pattern_copy = try allocator.dupe(Atom, cached.pattern);
+                // Also cache this specific string set for future exact lookups
+                try c.put(strings, pattern_copy, cached.cost);
+                return LearnResult{
+                    .pattern = pattern_copy,
+                    .cost = cached.cost,
+                    .allocator = allocator,
+                };
+            }
+        }
     }
 
     // Learn all patterns
@@ -93,6 +247,11 @@ pub fn learnBestPattern(
     // Copy the best pattern
     const best_pattern = patterns.items[best_pattern_idx];
     const pattern_copy = try allocator.dupe(Atom, best_pattern.atoms);
+
+    // OPTIMIZATION: Store in cache for future reuse
+    if (cache) |c| {
+        try c.put(strings, pattern_copy, min_cost.finite);
+    }
 
     return LearnResult{
         .pattern = pattern_copy,
@@ -591,7 +750,7 @@ test "learner: empty dataset" {
     const strings = [_][]const u8{};
     const atoms = [_]Atom{};
 
-    const result = try learnBestPattern(&strings, &atoms, allocator);
+    const result = try learnBestPattern(&strings, &atoms, null, allocator);
     defer if (result) |*r| r.deinit();
 
     try testing.expect(result != null);

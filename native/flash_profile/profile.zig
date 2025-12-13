@@ -103,8 +103,9 @@ pub fn profile(
     defer hierarchy.deinit();
 
     // Partition hierarchy into clusters
-    // Use min_patterns as the target cluster count per paper's algorithm (Figure 7)
-    const k = @min(options.min_patterns, strings.len);
+    // Use max_patterns as the initial cluster count to discover natural clusters
+    // The algorithm will then learn patterns and compress if needed
+    const k = @min(options.max_patterns, strings.len);
     var partition_result = try hierarchy_mod.partition(&hierarchy, k, allocator);
     defer partition_result.deinit();
 
@@ -121,8 +122,8 @@ pub fn profile(
             cluster_strings[i] = strings[idx];
         }
 
-        // Learn best pattern
-        const learn_result = try learner_mod.learnBestPattern(cluster_strings, atoms, allocator);
+        // Learn best pattern (no cache for cluster-level learning)
+        const learn_result = try learner_mod.learnBestPattern(cluster_strings, atoms, null, allocator);
 
         if (learn_result) |result| {
             defer {
@@ -340,6 +341,30 @@ fn buildHierarchy(
     options: ProfileOptions,
     allocator: Allocator,
 ) !hierarchy_mod.Hierarchy {
+    // OPTIMIZATION: Check for homogeneous data FIRST before any dissimilarity computation
+    // This optimization applies to both small and large datasets
+    // For homogeneous data (all strings match the same pattern), we can skip O(n²)
+    // dissimilarity computations and just use a uniform value
+    if (strings.len >= 3) {
+        const homogeneity_result = try checkHomogeneity(strings, atoms, allocator);
+        if (homogeneity_result.is_homogeneous) {
+            // All strings match the same pattern!
+            // Build matrix with uniform dissimilarity (fast path - O(n²) memory ops only)
+            // No expensive pattern learning required for each pair
+
+            var matrix = try hierarchy_mod.DissimilarityMatrix.init(strings, allocator);
+            defer matrix.deinit();
+
+            for (0..strings.len) |i| {
+                for (i + 1..strings.len) |j| {
+                    const diss_value = hierarchy_mod.Dissimilarity{ .finite = homogeneity_result.uniform_dissim };
+                    try matrix.set(i, j, diss_value);
+                }
+            }
+            return try hierarchy_mod.ahc(&matrix, allocator);
+        }
+    }
+
     // Compute threshold: ⌈θ·M⌉ (ceiling as per paper)
     const threshold = @as(usize, @intFromFloat(@ceil(options.theta * @as(f64, @floatFromInt(options.max_patterns)))));
 
@@ -347,7 +372,12 @@ fn buildHierarchy(
     var matrix = try hierarchy_mod.DissimilarityMatrix.init(strings, allocator);
     defer matrix.deinit();
 
+    // OPTIMIZATION: Create persistent pattern cache for this hierarchy build
+    var pattern_cache = learner_mod.PatternCache.init(allocator);
+    defer pattern_cache.deinit();
+
     if (strings.len <= threshold) {
+
         // Full AHC - compute all pairwise dissimilarities
         for (0..strings.len) |i| {
             for (i + 1..strings.len) |j| {
@@ -355,6 +385,7 @@ fn buildHierarchy(
                     strings[i],
                     strings[j],
                     atoms,
+                    &pattern_cache,
                     allocator,
                 );
 
@@ -370,13 +401,13 @@ fn buildHierarchy(
         // Use sampling and approximation for large datasets
         // M̂ = ⌈θ·M⌉
         const m_hat = threshold;
-        const sample_result = try dissimilarity_mod.sampleDissimilarities(strings, m_hat, atoms, allocator);
+        const sample_result = try dissimilarity_mod.sampleDissimilarities(strings, m_hat, atoms, &pattern_cache, allocator);
         defer {
             var mut_sample = sample_result;
             mut_sample.deinit();
         }
 
-        var approx_matrix = try dissimilarity_mod.buildApproxMatrix(strings, sample_result, atoms, allocator);
+        var approx_matrix = try dissimilarity_mod.buildApproxMatrix(strings, sample_result, atoms, &pattern_cache, allocator);
         defer approx_matrix.deinit();
 
         // Copy approximated dissimilarities into hierarchy matrix
@@ -535,6 +566,103 @@ fn compressProfile(
     }
 
     return result;
+}
+
+/// Result of homogeneity check
+const HomogeneityResult = struct {
+    is_homogeneous: bool,
+    uniform_dissim: f64,
+};
+
+/// Check if dataset is homogeneous (all strings match the same pattern)
+///
+/// OPTIMIZATION: For homogeneous data, we can skip most dissimilarity computations
+/// since all pairs will have the same dissimilarity value.
+///
+/// Algorithm:
+/// 1. Sample a few pairs and learn their patterns
+/// 2. Check if all costs are similar (within 1% tolerance)
+/// 3. Verify the pattern matches ALL strings in the dataset
+/// 4. If yes, return the uniform dissimilarity value
+fn checkHomogeneity(
+    strings: []const []const u8,
+    atoms: []const Atom,
+    allocator: Allocator,
+) !HomogeneityResult {
+    // Sample a few pairs (up to 5)
+    const sample_count = @min(5, strings.len);
+    var costs: [10]f64 = undefined; // Max 10 pairs from 5 strings
+    var patterns: [10]?[]const Atom = .{null} ** 10;
+    defer {
+        for (patterns) |p| {
+            if (p) |atoms_slice| {
+                allocator.free(atoms_slice);
+            }
+        }
+    }
+
+    var pair_idx: usize = 0;
+
+    // Learn patterns for first few pairs
+    for (0..sample_count) |i| {
+        for (i + 1..sample_count) |j| {
+            if (pair_idx >= 10) break;
+
+            const result = try dissimilarity_mod.computeDissimilarityWithPattern(
+                strings[i],
+                strings[j],
+                atoms,
+                null, // No cache needed for sampling
+                allocator,
+            );
+
+            costs[pair_idx] = result.cost;
+            patterns[pair_idx] = result.pattern;
+            pair_idx += 1;
+        }
+    }
+
+    // Need at least 2 pairs to check homogeneity
+    if (pair_idx < 2) {
+        return HomogeneityResult{ .is_homogeneous = false, .uniform_dissim = 0 };
+    }
+
+    // Check if all costs are similar (within 1% tolerance)
+    const first_cost = costs[0];
+
+    // Skip if cost is infinite
+    if (std.math.isInf(first_cost)) {
+        return HomogeneityResult{ .is_homogeneous = false, .uniform_dissim = 0 };
+    }
+
+    var all_similar = true;
+    for (costs[1..pair_idx]) |c| {
+        // Use absolute difference for small costs, relative for large
+        const tolerance = if (first_cost < 1.0) 0.01 else first_cost * 0.01;
+        if (@abs(c - first_cost) > tolerance) {
+            all_similar = false;
+            break;
+        }
+    }
+
+    if (!all_similar or patterns[0] == null) {
+        return HomogeneityResult{ .is_homogeneous = false, .uniform_dissim = 0 };
+    }
+
+    // Verify the pattern matches ALL strings
+    // Since we learned the pattern from a pair of strings, it should match both.
+    // But we need to check if it generalizes to ALL strings in the dataset.
+    const pattern = pattern_mod.Pattern.init(patterns[0].?);
+    for (strings) |s| {
+        if (!pattern.matches(s)) {
+            // Pattern doesn't generalize to all strings
+            return HomogeneityResult{ .is_homogeneous = false, .uniform_dissim = 0 };
+        }
+    }
+
+    // All strings match the same pattern!
+    // This means the dataset is homogeneous and all pairs will have similar dissimilarity
+    return HomogeneityResult{ .is_homogeneous = true, .uniform_dissim = first_cost };
 }
 
 // ============================================================================
@@ -855,4 +983,81 @@ test "compressProfile: compression needed" {
     try testing.expectEqual(@as(usize, 2), compressed.len);
     try testing.expectEqual(@as(f64, 1.0), compressed[0].cost);
     try testing.expectEqual(@as(f64, 2.0), compressed[1].cost);
+}
+
+test "checkHomogeneity: homogeneous phone numbers" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // All phone numbers have the same format
+    const strings = [_][]const u8{
+        "555-001-1234",
+        "555-002-1234",
+        "555-003-1234",
+        "555-004-1234",
+        "555-005-1234",
+    };
+
+    // Use full default atom set
+    const atoms = [_]Atom{
+        atom_mod.lower(),
+        atom_mod.upper(),
+        atom_mod.digit(),
+        atom_mod.bin(),
+        atom_mod.hex(),
+        atom_mod.alpha(),
+        atom_mod.alphaDigit(),
+        atom_mod.space(),
+        atom_mod.alphaDigitSpace(),
+        atom_mod.dotDash(),
+        atom_mod.punct(),
+        atom_mod.alphaDash(),
+        atom_mod.symb(),
+        atom_mod.alphaSpace(),
+        atom_mod.base64(),
+        atom_mod.any(),
+    };
+
+    const result = try checkHomogeneity(&strings, &atoms, allocator);
+
+    // Should detect homogeneity
+    try testing.expect(result.is_homogeneous);
+    try testing.expect(result.uniform_dissim >= 0.0);
+    try testing.expect(!std.math.isInf(result.uniform_dissim));
+}
+
+test "checkHomogeneity: heterogeneous data" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Mixed data with different patterns
+    const strings = [_][]const u8{
+        "555-001-1234",
+        "user@example.com",
+        "2023-01-15",
+        "PMC1234567",
+    };
+
+    const digit = atom_mod.digit();
+    const upper = atom_mod.upper();
+    const atoms = [_]Atom{ digit, upper };
+
+    const result = try checkHomogeneity(&strings, &atoms, allocator);
+
+    // Should NOT detect homogeneity
+    try testing.expect(!result.is_homogeneous);
+}
+
+test "checkHomogeneity: too few strings" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    const strings = [_][]const u8{"123"};
+    const digit = atom_mod.digit();
+    const atoms = [_]Atom{digit};
+
+    const result = try checkHomogeneity(&strings, &atoms, allocator);
+
+    // Should not detect homogeneity with too few strings
+    try testing.expect(!result.is_homogeneous);
 }

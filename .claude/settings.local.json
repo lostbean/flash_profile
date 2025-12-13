@@ -25,7 +25,9 @@
       "Bash(mix run:*)",
       "Bash(tee:*)",
       "Bash(FLASH_PROFILE_BACKEND=elixir mix run:*)",
-      "Bash(mix clean:*)"
+      "Bash(mix clean:*)",
+      "Bash(elixir:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

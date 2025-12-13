@@ -157,12 +157,105 @@ pub const Partition = struct {
 
 /// Cluster representation during AHC
 const Cluster = struct {
+    id: usize, // Unique ID for this cluster
     node: *const HierarchyNode,
     indices: []usize, // String indices in this cluster
     allocator: Allocator,
 
     fn deinit(self: *Cluster) void {
         self.allocator.free(self.indices);
+    }
+};
+
+/// Pair of cluster IDs (normalized: i < j)
+const ClusterPair = struct {
+    i: usize,
+    j: usize,
+
+    fn init(a: usize, b: usize) ClusterPair {
+        if (a < b) {
+            return .{ .i = a, .j = b };
+        } else {
+            return .{ .i = b, .j = a };
+        }
+    }
+};
+
+/// Entry in the linkage priority queue
+const LinkageEntry = struct {
+    pair: ClusterPair,
+    linkage: f64,
+
+    fn lessThan(_: void, a: LinkageEntry, b: LinkageEntry) std.math.Order {
+        // Min-heap: smaller linkage values have higher priority
+        if (a.linkage < b.linkage) return .lt;
+        if (a.linkage > b.linkage) return .gt;
+        return .eq;
+    }
+};
+
+/// Cache for storing and updating linkage values between clusters
+const LinkageCache = struct {
+    // Map from cluster pair to linkage value
+    cache: std.AutoHashMap(ClusterPair, f64),
+    // Priority queue of linkage entries (min-heap)
+    heap: std.PriorityQueue(LinkageEntry, void, LinkageEntry.lessThan),
+    allocator: Allocator,
+
+    fn init(allocator: Allocator) LinkageCache {
+        return .{
+            .cache = std.AutoHashMap(ClusterPair, f64).init(allocator),
+            .heap = std.PriorityQueue(LinkageEntry, void, LinkageEntry.lessThan).init(allocator, {}),
+            .allocator = allocator,
+        };
+    }
+
+    fn deinit(self: *LinkageCache) void {
+        self.cache.deinit();
+        self.heap.deinit();
+    }
+
+    /// Add a linkage value to the cache and heap
+    fn put(self: *LinkageCache, cluster_i: usize, cluster_j: usize, linkage: f64) !void {
+        const pair = ClusterPair.init(cluster_i, cluster_j);
+        try self.cache.put(pair, linkage);
+        try self.heap.add(.{ .pair = pair, .linkage = linkage });
+    }
+
+    /// Get linkage value from cache
+    fn get(self: *const LinkageCache, cluster_i: usize, cluster_j: usize) ?f64 {
+        const pair = ClusterPair.init(cluster_i, cluster_j);
+        return self.cache.get(pair);
+    }
+
+    /// Remove a cluster from the cache (when it gets merged)
+    fn removeCluster(self: *LinkageCache, cluster_id: usize, all_cluster_ids: []const usize) !void {
+        // Remove all pairs involving this cluster
+        for (all_cluster_ids) |other_id| {
+            if (other_id != cluster_id) {
+                const pair = ClusterPair.init(cluster_id, other_id);
+                _ = self.cache.remove(pair);
+            }
+        }
+    }
+
+    /// Find the minimum valid linkage pair
+    /// Returns null if no valid pair exists
+    fn findMin(self: *LinkageCache) ?struct { i: usize, j: usize, linkage: f64 } {
+        // Keep popping from heap until we find a valid entry
+        while (self.heap.removeOrNull()) |entry| {
+            // Check if this pair is still in the cache (not stale)
+            if (self.cache.get(entry.pair)) |cached_linkage| {
+                if (cached_linkage == entry.linkage) {
+                    return .{
+                        .i = entry.pair.i,
+                        .j = entry.pair.j,
+                        .linkage = entry.linkage,
+                    };
+                }
+            }
+        }
+        return null;
     }
 };
 
@@ -206,7 +299,7 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
         };
     }
 
-    // Initialize singleton clusters
+    // Initialize singleton clusters with unique IDs
     var clusters: std.ArrayList(Cluster) = .{};
     defer {
         for (clusters.items) |*cluster| {
@@ -223,20 +316,54 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
         indices[0] = i;
 
         try clusters.append(allocator, .{
+            .id = i, // Initial cluster ID is the string index
             .node = node,
             .indices = indices,
             .allocator = allocator,
         });
     }
 
+    // Initialize linkage cache with all pairwise linkages
+    var cache = LinkageCache.init(allocator);
+    defer cache.deinit();
+
+    // Map from cluster ID to cluster index in the clusters array
+    var cluster_id_to_idx = std.AutoHashMap(usize, usize).init(allocator);
+    defer cluster_id_to_idx.deinit();
+
+    for (clusters.items, 0..) |cluster, idx| {
+        try cluster_id_to_idx.put(cluster.id, idx);
+    }
+
+    // Compute all initial pairwise linkages
+    for (0..clusters.items.len) |i| {
+        for (i + 1..clusters.items.len) |j| {
+            const cluster_i = clusters.items[i];
+            const cluster_j = clusters.items[j];
+            const linkage = try completeLinkage(cluster_i, cluster_j, matrix, allocator);
+
+            // Only cache finite linkages
+            if (linkage == .finite) {
+                try cache.put(cluster_i.id, cluster_j.id, linkage.finite);
+            }
+        }
+    }
+
+    // Next cluster ID for merged clusters
+    var next_cluster_id: usize = n;
+
     // Main AHC loop: merge until only one cluster remains
     while (clusters.items.len > 1) {
-        // Find pair with minimum complete-linkage distance
-        const merge_result = try findMinLinkagePair(clusters.items, matrix, allocator);
+        // Find pair with minimum complete-linkage distance from cache
+        const min_pair = cache.findMin() orelse return error.NoValidMerge;
+
+        // Map cluster IDs back to indices
+        const idx_x = cluster_id_to_idx.get(min_pair.i) orelse return error.ClusterNotFound;
+        const idx_y = cluster_id_to_idx.get(min_pair.j) orelse return error.ClusterNotFound;
 
         // Get the two clusters to merge
-        const cluster_x = clusters.items[merge_result.idx_x];
-        const cluster_y = clusters.items[merge_result.idx_y];
+        const cluster_x = clusters.items[idx_x];
+        const cluster_y = clusters.items[idx_y];
 
         // Create merged node
         const merged_node = try allocator.create(HierarchyNode);
@@ -244,7 +371,7 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
             .internal = .{
                 .left = cluster_x.node,
                 .right = cluster_y.node,
-                .height = merge_result.linkage,
+                .height = min_pair.linkage,
             },
         };
 
@@ -253,10 +380,25 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
         @memcpy(merged_indices[0..cluster_x.indices.len], cluster_x.indices);
         @memcpy(merged_indices[cluster_x.indices.len..], cluster_y.indices);
 
-        // Remove old clusters and add merged cluster
+        // Collect all current cluster IDs for cache updates
+        var all_cluster_ids = try allocator.alloc(usize, clusters.items.len);
+        defer allocator.free(all_cluster_ids);
+        for (clusters.items, 0..) |cluster, i| {
+            all_cluster_ids[i] = cluster.id;
+        }
+
+        // Remove old clusters from cache
+        try cache.removeCluster(cluster_x.id, all_cluster_ids);
+        try cache.removeCluster(cluster_y.id, all_cluster_ids);
+
+        // Remove old clusters from ID map
+        _ = cluster_id_to_idx.remove(cluster_x.id);
+        _ = cluster_id_to_idx.remove(cluster_y.id);
+
+        // Remove old clusters from list
         // Remove larger index first to avoid index shifting issues
-        const remove_first = @max(merge_result.idx_x, merge_result.idx_y);
-        const remove_second = @min(merge_result.idx_x, merge_result.idx_y);
+        const remove_first = @max(idx_x, idx_y);
+        const remove_second = @min(idx_x, idx_y);
 
         clusters.items[remove_first].deinit();
         _ = clusters.orderedRemove(remove_first);
@@ -264,12 +406,47 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
         clusters.items[remove_second].deinit();
         _ = clusters.orderedRemove(remove_second);
 
-        // Add merged cluster
-        try clusters.append(allocator, .{
+        // Create merged cluster with new ID
+        const merged_cluster = Cluster{
+            .id = next_cluster_id,
             .node = merged_node,
             .indices = merged_indices,
             .allocator = allocator,
-        });
+        };
+        next_cluster_id += 1;
+
+        // Add merged cluster
+        const merged_idx = clusters.items.len;
+        try clusters.append(allocator, merged_cluster);
+        try cluster_id_to_idx.put(merged_cluster.id, merged_idx);
+
+        // Update cache with new linkages using incremental formula:
+        // η(Z, W) = max(η(X, W), η(Y, W))
+        for (clusters.items) |other_cluster| {
+            if (other_cluster.id != merged_cluster.id) {
+                // Get cached linkages for X-W and Y-W
+                const linkage_xw = cache.get(cluster_x.id, other_cluster.id);
+                const linkage_yw = cache.get(cluster_y.id, other_cluster.id);
+
+                // If both are available, use incremental formula
+                if (linkage_xw != null and linkage_yw != null) {
+                    const new_linkage = @max(linkage_xw.?, linkage_yw.?);
+                    try cache.put(merged_cluster.id, other_cluster.id, new_linkage);
+                } else {
+                    // Fallback: compute from scratch
+                    const linkage = try completeLinkage(merged_cluster, other_cluster, matrix, allocator);
+                    if (linkage == .finite) {
+                        try cache.put(merged_cluster.id, other_cluster.id, linkage.finite);
+                    }
+                }
+            }
+        }
+
+        // Update cluster ID to index mapping for remaining clusters
+        cluster_id_to_idx.clearRetainingCapacity();
+        for (clusters.items, 0..) |cluster, idx| {
+            try cluster_id_to_idx.put(cluster.id, idx);
+        }
     }
 
     // Return the final cluster
@@ -654,12 +831,14 @@ test "Complete linkage: two singletons" {
     indices1[0] = 1;
 
     var cluster0 = Cluster{
+        .id = 0,
         .node = node0,
         .indices = indices0,
         .allocator = allocator,
     };
 
     var cluster1 = Cluster{
+        .id = 1,
         .node = node1,
         .indices = indices1,
         .allocator = allocator,
@@ -704,12 +883,14 @@ test "Complete linkage: max of multiple pairs" {
     indices23[1] = 3;
 
     var cluster01 = Cluster{
+        .id = 0,
         .node = node01,
         .indices = indices01,
         .allocator = allocator,
     };
 
     var cluster23 = Cluster{
+        .id = 1,
         .node = node23,
         .indices = indices23,
         .allocator = allocator,
@@ -759,4 +940,63 @@ test "Dissimilarity: max" {
 
     const max_inf_b = inf.max(b);
     try testing.expectEqual(expected_inf, max_inf_b);
+}
+
+test "LinkageCache: basic operations" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    var cache = LinkageCache.init(allocator);
+    defer cache.deinit();
+
+    // Add some linkage values
+    try cache.put(0, 1, 5.0);
+    try cache.put(0, 2, 10.0);
+    try cache.put(1, 2, 3.0);
+
+    // Test retrieval
+    try testing.expectEqual(@as(?f64, 5.0), cache.get(0, 1));
+    try testing.expectEqual(@as(?f64, 5.0), cache.get(1, 0)); // Symmetric
+    try testing.expectEqual(@as(?f64, 10.0), cache.get(0, 2));
+    try testing.expectEqual(@as(?f64, 3.0), cache.get(1, 2));
+
+    // Test findMin - should return minimum linkage
+    const min = cache.findMin();
+    try testing.expect(min != null);
+    try testing.expectEqual(@as(f64, 3.0), min.?.linkage);
+    try testing.expect((min.?.i == 1 and min.?.j == 2) or (min.?.i == 2 and min.?.j == 1));
+}
+
+test "LinkageCache: larger dataset with incremental updates" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Create a larger dataset to test the cache optimization
+    const strings = [_][]const u8{ "a", "b", "c", "d", "e" };
+    var matrix = try DissimilarityMatrix.init(&strings, allocator);
+    defer matrix.deinit();
+
+    // Set up a pattern where (a,b) are close
+    try matrix.set(0, 1, .{ .finite = 1.0 }); // a-b: close
+    try matrix.set(0, 2, .{ .finite = 5.0 }); // a-c
+    try matrix.set(0, 3, .{ .finite = 8.0 }); // a-d
+    try matrix.set(0, 4, .{ .finite = 10.0 }); // a-e
+    try matrix.set(1, 2, .{ .finite = 6.0 }); // b-c
+    try matrix.set(1, 3, .{ .finite = 9.0 }); // b-d
+    try matrix.set(1, 4, .{ .finite = 11.0 }); // b-e
+    try matrix.set(2, 3, .{ .finite = 2.0 }); // c-d: close
+    try matrix.set(2, 4, .{ .finite = 12.0 }); // c-e
+    try matrix.set(3, 4, .{ .finite = 13.0 }); // d-e
+
+    // Run AHC and verify it completes successfully
+    var hier = try ahc(&matrix, allocator);
+    defer hier.deinit();
+
+    // Verify basic properties
+    try testing.expectEqual(@as(usize, 5), hier.num_strings);
+    try testing.expectEqual(HierarchyNode.internal, std.meta.activeTag(hier.root.*));
+
+    // The algorithm should produce a valid dendrogram
+    // First merge should be (a,b) at height 1.0 or (c,d) at height 2.0
+    try testing.expect(hier.root.getHeight() > 0.0);
 }

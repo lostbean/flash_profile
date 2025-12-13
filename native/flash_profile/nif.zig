@@ -62,7 +62,7 @@ pub fn learn_pattern_nif(strings: []const []const u8) !beam.term {
     }
 
     // Learn best pattern
-    const result = try learner_mod.learnBestPattern(strings, &default_atoms, allocator);
+    const result = try learner_mod.learnBestPattern(strings, &default_atoms, null, allocator);
 
     if (result) |learn_result| {
         // Collect pattern atom names
@@ -190,6 +190,7 @@ pub fn dissimilarity_nif(string1: []const u8, string2: []const u8) !beam.term {
         string1,
         string2,
         &default_atoms,
+        null,
         allocator,
     );
 
