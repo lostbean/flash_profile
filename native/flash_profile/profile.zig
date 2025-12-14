@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const atom_mod = @import("atom.zig");
 const Atom = atom_mod.Atom;
+const AtomType = atom_mod.AtomType;
 const learner_mod = @import("learner.zig");
 const cost_mod = @import("cost.zig");
 const pattern_mod = @import("pattern.zig");
@@ -202,27 +203,38 @@ pub fn profile(
 
     const learned_entries = try entries.toOwnedSlice(allocator);
 
+    // Deduplicate patterns - if two clusters learned the same pattern, merge them
+    const deduped_entries = try deduplicatePatterns(learned_entries, allocator);
+
+    // Free the original entries if deduplication occurred
+    if (deduped_entries.ptr != learned_entries.ptr) {
+        for (learned_entries) |*entry| {
+            entry.deinit();
+        }
+        allocator.free(learned_entries);
+    }
+
     // If we have too many patterns, compress to max_patterns (per paper's Figure 7)
-    if (learned_entries.len > options.max_patterns) {
+    if (deduped_entries.len > options.max_patterns) {
         const compressed_result = try compress_mod.compressProfile(
-            learned_entries,
+            deduped_entries,
             options.max_patterns,
             strings,
             atoms,
             allocator,
         );
 
-        // Free the uncompressed entries
-        for (learned_entries) |*entry| {
+        // Free the deduped entries
+        for (deduped_entries) |*entry| {
             entry.deinit();
         }
-        allocator.free(learned_entries);
+        allocator.free(deduped_entries);
 
         return compressed_result;
     }
 
     return ProfileResult{
-        .entries = learned_entries,
+        .entries = deduped_entries,
         .allocator = allocator,
     };
 }
@@ -347,14 +359,27 @@ pub fn bigProfile(
         }
     }
 
-    // Compress if we have too many patterns
-    if (all_entries.items.len > options.max_patterns) {
-        const compressed = try compressProfile(all_entries.items, strings, options.max_patterns, allocator);
+    // Deduplicate patterns before compression
+    const accumulated_entries = try all_entries.toOwnedSlice(allocator);
+    const deduped_entries = try deduplicatePatterns(accumulated_entries, allocator);
 
-        // Free the excess entries
-        for (all_entries.items) |*entry| {
+    // Free the original entries if deduplication occurred
+    if (deduped_entries.ptr != accumulated_entries.ptr) {
+        for (accumulated_entries) |*entry| {
             entry.deinit();
         }
+        allocator.free(accumulated_entries);
+    }
+
+    // Compress if we have too many patterns
+    if (deduped_entries.len > options.max_patterns) {
+        const compressed = try compressProfile(deduped_entries, strings, options.max_patterns, allocator);
+
+        // Free the deduped entries
+        for (deduped_entries) |*entry| {
+            entry.deinit();
+        }
+        allocator.free(deduped_entries);
 
         // Replace with compressed
         return ProfileResult{
@@ -364,9 +389,137 @@ pub fn bigProfile(
     }
 
     return ProfileResult{
-        .entries = try all_entries.toOwnedSlice(allocator),
+        .entries = deduped_entries,
         .allocator = allocator,
     };
+}
+
+/// Check if two atoms are equal
+///
+/// Two atoms are considered equal if they have the same name, static cost, and matching data.
+/// This is a structural equality check used for pattern deduplication.
+fn atomsEqual(a: Atom, b: Atom) bool {
+    // First check if names match (fast path - most discriminating)
+    if (!std.mem.eql(u8, a.name, b.name)) return false;
+
+    // Check if costs match
+    if (a.static_cost != b.static_cost) return false;
+
+    // Check atom type tag
+    const a_tag = @as(AtomType, a.data);
+    const b_tag = @as(AtomType, b.data);
+    if (a_tag != b_tag) return false;
+
+    // Check type-specific data
+    return switch (a.data) {
+        .constant => |a_data| blk: {
+            const b_data = b.data.constant;
+            break :blk std.mem.eql(u8, a_data.string, b_data.string);
+        },
+        .char_class => |a_data| blk: {
+            const b_data = b.data.char_class;
+            // For char_class atoms, check width and character set equality
+            break :blk a_data.width == b_data.width and
+                a_data.char_set.low == b_data.char_set.low and
+                a_data.char_set.high == b_data.char_set.high;
+        },
+        .regex => true, // Not implemented, treat as equal if both are regex
+        .function => true, // Not implemented, treat as equal if both are function
+    };
+}
+
+/// Check if two patterns (slices of atoms) are equal
+///
+/// Two patterns are equal if they have the same length and sequence of atom names.
+/// We use a simpler comparison (just names) rather than full structural equality
+/// because atoms from different sources may have identical semantics but different
+/// memory addresses or minor implementation differences.
+fn patternsEqual(a: []const Atom, b: []const Atom) bool {
+    if (a.len != b.len) return false;
+
+    for (a, b) |atom_a, atom_b| {
+        // Simple comparison: just check if names match
+        // This is sufficient for deduplication since atom names uniquely identify
+        // their behavior in the default atom set
+        if (!std.mem.eql(u8, atom_a.name, atom_b.name)) return false;
+    }
+
+    return true;
+}
+
+/// Deduplicate patterns by merging entries with identical patterns
+///
+/// When two clusters independently learn the same pattern, we merge their
+/// data_indices arrays into a single entry. This addresses the issue where
+/// different clusters can produce duplicate patterns in the final profile.
+///
+/// Returns a new slice with deduplicated entries. If no duplicates are found,
+/// returns the original slice unchanged.
+fn deduplicatePatterns(
+    entries: []ProfileEntry,
+    allocator: Allocator,
+) ![]ProfileEntry {
+    if (entries.len <= 1) return entries;
+
+    // Track which entries to keep and which to merge
+    var deduped: std.ArrayList(ProfileEntry) = .{};
+    errdefer {
+        for (deduped.items) |*entry| {
+            entry.deinit();
+        }
+        deduped.deinit(allocator);
+    }
+
+    // Track which entries we've already processed
+    var processed = try allocator.alloc(bool, entries.len);
+    defer allocator.free(processed);
+    @memset(processed, false);
+
+    for (entries, 0..) |*entry_i, i| {
+        if (processed[i]) continue;
+
+        // Collect all indices that match this pattern
+        var merged_indices: std.ArrayList(usize) = .{};
+        errdefer merged_indices.deinit(allocator);
+
+        // Add this entry's indices
+        try merged_indices.appendSlice(allocator, entry_i.data_indices);
+        processed[i] = true;
+
+        // Find all other entries with the same pattern
+        for (entries[i + 1 ..], 0..) |*entry_j, offset| {
+            const j = i + 1 + offset;
+            if (processed[j]) continue;
+
+            if (patternsEqual(entry_i.pattern, entry_j.pattern)) {
+                // Same pattern - merge indices
+                try merged_indices.appendSlice(allocator, entry_j.data_indices);
+                processed[j] = true;
+            }
+        }
+
+        // Create merged entry
+        const pattern_copy = try allocator.dupe(Atom, entry_i.pattern);
+        const indices_copy = try merged_indices.toOwnedSlice(allocator);
+
+        try deduped.append(allocator, .{
+            .pattern = pattern_copy,
+            .cost = entry_i.cost,
+            .data_indices = indices_copy,
+            .allocator = allocator,
+        });
+    }
+
+    // If no deduplication occurred, return original slice
+    if (deduped.items.len == entries.len) {
+        // Clean up the duplicated entries we created
+        for (deduped.items) |*entry| {
+            entry.deinit();
+        }
+        return entries;
+    }
+
+    return try deduped.toOwnedSlice(allocator);
 }
 
 /// Build hierarchy using agglomerative hierarchical clustering (Figure 12)
@@ -933,6 +1086,93 @@ test "compressProfile: compression needed" {
     try testing.expectEqual(@as(usize, 2), compressed.len);
     try testing.expectEqual(@as(f64, 1.0), compressed[0].cost);
     try testing.expectEqual(@as(f64, 2.0), compressed[1].cost);
+}
+
+test "deduplicatePatterns: merges identical patterns" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Create two identical patterns using lower() atom
+    const lower = atom_mod.lower();
+    const pattern1 = try allocator.dupe(Atom, &[_]Atom{lower});
+    defer allocator.free(pattern1);
+    const pattern2 = try allocator.dupe(Atom, &[_]Atom{lower});
+    defer allocator.free(pattern2);
+    const pattern3 = try allocator.dupe(Atom, &[_]Atom{atom_mod.upper()});
+    defer allocator.free(pattern3);
+
+    // Create indices for each entry
+    const idx0 = try allocator.dupe(usize, &[_]usize{0});
+    defer allocator.free(idx0);
+    const idx1 = try allocator.dupe(usize, &[_]usize{1});
+    defer allocator.free(idx1);
+    const idx2 = try allocator.dupe(usize, &[_]usize{2});
+    defer allocator.free(idx2);
+
+    // Create entries: 0 and 2 have identical patterns (Lower)
+    var entries = [_]ProfileEntry{
+        .{
+            .pattern = pattern1,
+            .cost = 1.0,
+            .data_indices = idx0,
+            .allocator = allocator,
+        },
+        .{
+            .pattern = pattern3,
+            .cost = 2.0,
+            .data_indices = idx1,
+            .allocator = allocator,
+        },
+        .{
+            .pattern = pattern2,
+            .cost = 1.5,
+            .data_indices = idx2,
+            .allocator = allocator,
+        },
+    };
+
+    const deduped = try deduplicatePatterns(&entries, allocator);
+    defer {
+        // Only free if deduplication created new entries
+        if (deduped.ptr != &entries) {
+            for (deduped) |*entry| {
+                entry.deinit();
+            }
+            allocator.free(deduped);
+        }
+    }
+
+    // Should have 2 entries after deduplication (Lower and Upper)
+    try testing.expectEqual(@as(usize, 2), deduped.len);
+
+    // First entry should have merged indices from entries 0 and 2
+    try testing.expectEqual(@as(usize, 2), deduped[0].data_indices.len);
+    try testing.expect(deduped[0].data_indices[0] == 0);
+    try testing.expect(deduped[0].data_indices[1] == 2);
+
+    // Second entry should have only index 1
+    try testing.expectEqual(@as(usize, 1), deduped[1].data_indices.len);
+    try testing.expect(deduped[1].data_indices[0] == 1);
+}
+
+test "patternsEqual: identical patterns" {
+    const lower = atom_mod.lower();
+    const upper = atom_mod.upper();
+
+    const pattern1 = [_]Atom{ lower, upper };
+    const pattern2 = [_]Atom{ lower, upper };
+
+    try std.testing.expect(patternsEqual(&pattern1, &pattern2));
+}
+
+test "patternsEqual: different patterns" {
+    const lower = atom_mod.lower();
+    const upper = atom_mod.upper();
+
+    const pattern1 = [_]Atom{ lower, upper };
+    const pattern2 = [_]Atom{ upper, lower };
+
+    try std.testing.expect(!patternsEqual(&pattern1, &pattern2));
 }
 
 // NOTE: All tests calling checkHomogeneity(), profile(), or bigProfile() with non-empty data
