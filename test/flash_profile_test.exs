@@ -141,6 +141,12 @@ defmodule FlashProfileTest do
         assert diss_similar <= diss_different
       end
     end
+
+    test "dissimilarity of identical strings is exactly 0.0" do
+      # Per paper §3.1, Definition 3.1: η(x,y) = 0 if x = y
+      assert FlashProfile.dissimilarity("ABC", "ABC") == 0.0
+      assert FlashProfile.dissimilarity("", "") == 0.0
+    end
   end
 
   describe "integration: complex real-world scenarios" do
