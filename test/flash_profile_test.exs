@@ -357,6 +357,54 @@ defmodule FlashProfileTest do
     end
   end
 
+  describe "validation errors" do
+    test "profile returns error for invalid theta (zero)" do
+      assert FlashProfile.profile(["test"], theta: 0.0) == {:error, :invalid_theta}
+    end
+
+    test "profile returns error for invalid theta (negative)" do
+      assert FlashProfile.profile(["test"], theta: -1.0) == {:error, :invalid_theta}
+    end
+
+    test "profile returns error for invalid theta (over limit)" do
+      assert FlashProfile.profile(["test"], theta: 101.0) == {:error, :invalid_theta}
+    end
+
+    test "big_profile returns error for invalid mu (zero)" do
+      assert FlashProfile.big_profile(["test"], mu: 0.0) == {:error, :invalid_mu}
+    end
+
+    test "big_profile returns error for invalid mu (negative)" do
+      assert FlashProfile.big_profile(["test"], mu: -1.0) == {:error, :invalid_mu}
+    end
+
+    test "big_profile returns error for invalid mu (over limit)" do
+      assert FlashProfile.big_profile(["test"], mu: 101.0) == {:error, :invalid_mu}
+    end
+
+    test "profile returns error for string too long" do
+      # Create a string that exceeds 100KB limit
+      long_string = String.duplicate("a", 100_001)
+      assert FlashProfile.profile([long_string]) == {:error, :string_too_long}
+    end
+
+    test "big_profile returns error for string too long" do
+      long_string = String.duplicate("a", 100_001)
+      assert FlashProfile.big_profile([long_string]) == {:error, :string_too_long}
+    end
+
+    test "learn_pattern returns error for string too long" do
+      long_string = String.duplicate("a", 100_001)
+      assert FlashProfile.learn_pattern([long_string]) == {:error, :string_too_long}
+    end
+
+    test "dissimilarity returns error for string too long" do
+      long_string = String.duplicate("a", 100_001)
+      assert FlashProfile.dissimilarity(long_string, "short") == {:error, :string_too_long}
+      assert FlashProfile.dissimilarity("short", long_string) == {:error, :string_too_long}
+    end
+  end
+
   describe "documentation examples" do
     test "README example: profiling PMC IDs" do
       strings = ["PMC1234567", "PMC9876543", "PMC5555555"]

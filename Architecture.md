@@ -15,6 +15,7 @@ by Padhi et al. (OOPSLA 2018).
 6. [Data Structures](#data-structures)
 7. [Cost Function](#cost-function)
 8. [Performance Optimizations](#performance-optimizations)
+9. [Safety Guardrails](#safety-guardrails)
 
 ---
 
@@ -141,6 +142,7 @@ flowchart TB
 
     subgraph "Zig NIF Layer"
         NIF[nif.zig]
+        Validation[validation.zig]
         Profile[profile.zig]
         Hierarchy[hierarchy.zig]
         Dissim[dissimilarity.zig]
@@ -156,7 +158,8 @@ flowchart TB
     API --> Atom
     API --> Pattern
     Native --> NIF
-    NIF --> Profile
+    NIF --> Validation
+    Validation --> Profile
     Profile --> Hierarchy
     Profile --> Learner
     Profile --> Compress
@@ -175,6 +178,7 @@ flowchart TB
 | ------------------- | ------------------------------------------------------ |
 | **Elixir API**      | Public interface, atom definitions, pattern formatting |
 | **Native Bindings** | NIF marshalling, default atoms registry                |
+| **Validation**      | Input validation, safety limits at NIF boundary        |
 | **Zig Core**        | High-performance algorithm implementation              |
 
 ---
@@ -676,6 +680,45 @@ All temporary allocations use arena allocators for:
 - Batch deallocation
 - Cache-friendly memory layout
 - Reduced allocation overhead
+
+### 7. Iterative Pattern Learning
+
+The pattern learning algorithm uses an iterative approach with an explicit stack
+instead of recursion, preventing stack overflow on deeply nested patterns.
+
+---
+
+## Safety Guardrails
+
+The Zig NIF implementation includes comprehensive safety measures to prevent
+crashes and resource exhaustion.
+
+### Input Validation
+
+All 6 NIF entry points validate inputs before processing:
+
+```zig
+// validation.zig validates:
+// - Non-null string pointers
+// - Reasonable string lengths
+// - Valid parameter ranges (min_patterns, max_patterns, theta, mu)
+// - Non-empty input arrays
+```
+
+### Computation Limits
+
+| Limit                  | Value   | Purpose                              |
+| ---------------------- | ------- | ------------------------------------ |
+| `MAX_ITERATIONS`       | 1M      | Pattern learning iteration cap       |
+| `MAX_CACHE_ENTRIES`    | 10K     | PatternCache size limit              |
+| `MAX_AHC_ITERATIONS`   | 100K    | Hierarchical clustering iteration cap|
+
+### Arithmetic Safety
+
+- Division by zero checks in `atom.zig` for `constant()` and `withFixedWidth()`
+- Safe integer casts using `std.math.cast` in `learner.zig`
+- Conditional bitcast for timestamp handling in `profile.zig`
+- Bounds checks replace assertions in `dissimilarity.zig`
 
 ---
 

@@ -272,17 +272,29 @@ defmodule FlashProfile.Native do
   ## Returns
 
   - `{:ok, [%{pattern: [atom_names], cost: float, indices: [int]}]}` on success
-  - `{:error, reason}` on failure
+  - `{:error, reason}` on validation failure (see `t:validation_error/0`)
+
+  ## Input Limits
+
+  - Maximum 100,000 strings
+  - Maximum 100KB per string
+  - Maximum 1GB total input size
+  - `min_patterns` must be >= 1
+  - `max_patterns` must be >= `min_patterns` and <= 1000
+  - `theta` must be > 0 and <= 100
 
   ## Examples
 
   ```elixir
   iex> FlashProfile.Native.profile(["PMC123", "PMC456", "PMC789"], 1, 5, 1.25)
   {:ok, [%{pattern: ["PMC", "Digit"], cost: 12.3, indices: [0, 1, 2]}]}
+
+  iex> FlashProfile.Native.profile(["test"], 1, 10, 0.0)
+  {:error, :invalid_theta}
   ```
   """
   @spec profile([String.t()], non_neg_integer(), non_neg_integer(), float()) ::
-          {:ok, [profile_entry()]} | {:error, atom()}
+          {:ok, [profile_entry()]} | {:error, validation_error()}
   def profile(strings, min_patterns \\ 1, max_patterns \\ 10, theta \\ 1.25)
       when is_list(strings) and is_integer(min_patterns) and is_integer(max_patterns) and
              is_float(theta) do
@@ -305,17 +317,30 @@ defmodule FlashProfile.Native do
   ## Returns
 
   - `{:ok, [%{pattern: [atom_names], cost: float, indices: [int]}]}` on success
-  - `{:error, reason}` on failure
+  - `{:error, reason}` on validation failure (see `t:validation_error/0`)
+
+  ## Input Limits
+
+  - Maximum 100,000 strings
+  - Maximum 100KB per string
+  - Maximum 1GB total input size
+  - `min_patterns` must be >= 1
+  - `max_patterns` must be >= `min_patterns` and <= 1000
+  - `theta` must be > 0 and <= 100
+  - `mu` must be > 0 and <= 100
 
   ## Examples
 
   ```elixir
   iex> FlashProfile.Native.big_profile(large_dataset, 1, 10, 1.25, 4.0)
   {:ok, [%{pattern: ["Lower", "Digit"], cost: 15.2, indices: [0, 5, 10]}]}
+
+  iex> FlashProfile.Native.big_profile(["test"], 1, 10, 1.25, -1.0)
+  {:error, :invalid_mu}
   ```
   """
   @spec big_profile([String.t()], non_neg_integer(), non_neg_integer(), float(), float()) ::
-          {:ok, [profile_entry()]} | {:error, atom()}
+          {:ok, [profile_entry()]} | {:error, validation_error()}
   def big_profile(strings, min_patterns \\ 1, max_patterns \\ 10, theta \\ 1.25, mu \\ 4.0)
       when is_list(strings) and is_integer(min_patterns) and is_integer(max_patterns) and
              is_float(theta) and is_float(mu) do
@@ -336,7 +361,11 @@ defmodule FlashProfile.Native do
   ## Returns
 
   - `{:ok, cost}` on success
-  - `{:error, :no_pattern}` if no pattern matches both strings
+  - `{:error, reason}` on validation failure (see `t:validation_error/0`)
+
+  ## Input Limits
+
+  - Maximum 100KB per string
 
   ## Examples
 
@@ -348,7 +377,7 @@ defmodule FlashProfile.Native do
   {:error, :no_pattern}
   ```
   """
-  @spec dissimilarity(String.t(), String.t()) :: {:ok, float()} | {:error, atom()}
+  @spec dissimilarity(String.t(), String.t()) :: {:ok, float()} | {:error, validation_error()}
   def dissimilarity(string1, string2)
       when is_binary(string1) and is_binary(string2) do
     dissimilarity_nif(string1, string2)
@@ -364,7 +393,13 @@ defmodule FlashProfile.Native do
   ## Returns
 
   - `{:ok, {pattern_names, cost}}` on success
-  - `{:error, reason}` on failure
+  - `{:error, reason}` on validation failure (see `t:validation_error/0`)
+
+  ## Input Limits
+
+  - Maximum 100,000 strings
+  - Maximum 100KB per string
+  - Maximum 1GB total input size
 
   ## Examples
 
@@ -373,7 +408,8 @@ defmodule FlashProfile.Native do
   {:ok, {["Lower"], 9.1}}
   ```
   """
-  @spec learn_pattern([String.t()]) :: {:ok, {[String.t()], float()}} | {:error, atom()}
+  @spec learn_pattern([String.t()]) ::
+          {:ok, {[String.t()], float()}} | {:error, validation_error()}
   def learn_pattern(strings) when is_list(strings) do
     learn_pattern_nif(strings)
   end
@@ -418,8 +454,11 @@ defmodule FlashProfile.Native do
   ## Returns
 
   - `{:ok, cost}` on success
-  - `{:error, :no_match}` if the pattern doesn't match all strings
-  - `{:error, :invalid_atom}` if an atom name is invalid
+  - `{:error, reason}` on validation failure (see `t:validation_error/0`)
+
+  Common errors:
+  - `:no_match` - Pattern doesn't match all strings
+  - `:invalid_atom` - Invalid atom name in pattern
 
   ## Examples
 
@@ -431,7 +470,8 @@ defmodule FlashProfile.Native do
   {:error, :no_match}
   ```
   """
-  @spec calculate_cost([String.t()], [String.t()]) :: {:ok, float()} | {:error, atom()}
+  @spec calculate_cost([String.t()], [String.t()]) ::
+          {:ok, float()} | {:error, validation_error()}
   def calculate_cost(pattern_names, strings)
       when is_list(pattern_names) and is_list(strings) do
     calculate_cost_nif(pattern_names, strings)
@@ -453,4 +493,35 @@ defmodule FlashProfile.Native do
           cost: float(),
           indices: [non_neg_integer()]
         }
+
+  @typedoc """
+  Validation error reasons returned by the Zig NIF backend.
+
+  These errors are returned when input validation fails at the NIF boundary:
+  - `:too_many_strings` - Input exceeds maximum string count (100,000)
+  - `:string_too_long` - A string exceeds maximum length (100KB)
+  - `:total_size_exceeded` - Total input size exceeds limit (1GB)
+  - `:invalid_min_patterns` - `min_patterns` must be >= 1
+  - `:invalid_max_patterns` - `max_patterns` must be >= `min_patterns` and <= 1000
+  - `:invalid_theta` - `theta` must be > 0 and <= 100
+  - `:invalid_mu` - `mu` must be > 0 and <= 100
+  - `:pattern_too_long` - Pattern names array exceeds limit (100)
+  - `:invalid_number` - NaN or infinity in numeric parameter
+  - `:no_pattern` - No pattern could be learned for the input
+  - `:no_match` - Pattern does not match all strings
+  - `:invalid_atom` - Invalid atom name in pattern
+  """
+  @type validation_error ::
+          :too_many_strings
+          | :string_too_long
+          | :total_size_exceeded
+          | :invalid_min_patterns
+          | :invalid_max_patterns
+          | :invalid_theta
+          | :invalid_mu
+          | :pattern_too_long
+          | :invalid_number
+          | :no_pattern
+          | :no_match
+          | :invalid_atom
 end

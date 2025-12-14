@@ -383,9 +383,11 @@ pub fn any() Atom {
 
 /// Create a constant string atom.
 /// Cost is proportional to 1/length to prefer longer matches.
+/// Empty strings get a high cost (1000.0) to discourage their use.
 pub fn constant(name: []const u8, string: []const u8) Atom {
     const len = string.len;
-    const cost = 100.0 / @as(f64, @floatFromInt(len));
+    // Guard against division by zero: empty strings get high cost
+    const cost = if (len == 0) 1000.0 else 100.0 / @as(f64, @floatFromInt(len));
 
     return .{
         .name = name,
@@ -395,7 +397,11 @@ pub fn constant(name: []const u8, string: []const u8) Atom {
 }
 
 /// Create a fixed-width variant of a character class atom.
+/// Width of 0 returns the base atom unchanged (no division by zero).
 pub fn withFixedWidth(base_atom: Atom, width: u32) Atom {
+    // Guard against zero width - return base atom unchanged
+    if (width == 0) return base_atom;
+
     var result = base_atom;
     if (result.data == .char_class) {
         result.data.char_class.width = width;

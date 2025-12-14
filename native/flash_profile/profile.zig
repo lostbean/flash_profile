@@ -851,7 +851,10 @@ pub fn sampleStrings(
     }
 
     // Fisher-Yates shuffle for first sample_size elements
-    var rng = std.Random.DefaultPrng.init(@as(u64, @intCast(std.time.timestamp())));
+    // Handle negative timestamps safely by using bitcast instead of intCast
+    const ts = std.time.timestamp();
+    const seed: u64 = if (ts >= 0) @as(u64, @intCast(ts)) else @bitCast(@as(i64, ts));
+    var rng = std.Random.DefaultPrng.init(seed);
     const random = rng.random();
 
     for (0..sample_size) |i| {

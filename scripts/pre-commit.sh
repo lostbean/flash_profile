@@ -15,29 +15,34 @@ echo
 
 # Format all code first
 echo "--- Formatting ---"
-"$SCRIPTS_DIR/format-zig.sh"
-"$SCRIPTS_DIR/format-elixir.sh"
+
+ZIG_DIR="native/flash_profile"
+echo "Formatting Zig code..."
+zig fmt "$ZIG_DIR"/*.zig
+
+echo "Formatting Elixir code..."
+mix format
 echo
 
 # Run Zig checks first (faster feedback)
 echo "--- Checking Zig ---"
 if ! "$SCRIPTS_DIR/check-zig.sh"; then
-    echo ""
-    echo "========================================"
-    echo "  FAILED: Zig checks failed!"
-    echo "========================================"
-    exit 1
+  echo ""
+  echo "========================================"
+  echo "  FAILED: Zig checks failed!"
+  echo "========================================"
+  exit 1
 fi
 echo
 
 # Run Elixir checks (format, compile, tests)
 echo "--- Checking Elixir ---"
 if ! "$SCRIPTS_DIR/check-elixir.sh"; then
-    echo ""
-    echo "========================================"
-    echo "  FAILED: Elixir checks failed!"
-    echo "========================================"
-    exit 1
+  echo ""
+  echo "========================================"
+  echo "  FAILED: Elixir checks failed!"
+  echo "========================================"
+  exit 1
 fi
 echo
 

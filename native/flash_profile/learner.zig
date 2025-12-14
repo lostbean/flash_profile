@@ -13,6 +13,9 @@ const Cost = types.Cost;
 pub const MAX_PATTERN_LENGTH: usize = 15;
 pub const MAX_PATTERNS_EXPLORED: usize = 5000;
 
+/// Safety limit for iterative pattern learning to prevent unbounded execution
+pub const MAX_ITERATIONS: usize = 1_000_000;
+
 /// Index into an atom list
 pub const AtomIndex = usize;
 
@@ -35,6 +38,9 @@ pub const CachedPatternResult = struct {
 
 /// Persistent pattern cache that survives across multiple learnBestPattern calls
 pub const PatternCache = struct {
+    /// Maximum cache entries to prevent unbounded memory growth
+    pub const MAX_CACHE_ENTRIES: usize = 10_000;
+
     /// HashMap from string pair hash to learned pattern
     cache: std.AutoHashMap(u128, CachedPatternResult),
     allocator: Allocator,
@@ -137,7 +143,11 @@ pub const PatternCache = struct {
     }
 
     /// Store pattern for strings
+    /// Silently ignores if cache is full to prevent unbounded memory growth
     pub fn put(self: *PatternCache, strings: []const []const u8, pattern: []const Atom, cost: f64) !void {
+        // Guard: don't grow cache beyond limit
+        if (self.cache.count() >= MAX_CACHE_ENTRIES) return;
+
         const key = makeCacheKey(strings);
 
         // Check if already exists
@@ -307,10 +317,11 @@ fn learnAllPatterns(
         memo_cache.deinit();
     }
 
-    return try learnPatternsRecursive(strings, atoms, 0, &memo_cache, allocator);
+    return try learnPatternsIterative(strings, atoms, 0, &memo_cache, allocator);
 }
 
 /// Recursively learn patterns with depth tracking and limits
+/// NOTE: This function is kept for reference but the iterative version is used
 ///
 /// Implements pattern synthesis with memoization to avoid recomputing patterns
 /// for the same set of strings.
@@ -475,6 +486,270 @@ fn doLearnPatterns(
     return result_patterns;
 }
 
+// ============================================================================
+// Iterative Pattern Learning (Stack Overflow Safe)
+// ============================================================================
+
+/// Work item states for iterative processing
+const WorkState = enum {
+    /// Initial state: check cache, get compatible atoms
+    init,
+    /// Processing atoms one by one
+    processing_atoms,
+    /// Child work item pushed, waiting for its results
+    waiting_for_child,
+    /// Store in cache, return results
+    finalizing,
+};
+
+/// Work item for iterative pattern learning
+/// Replaces recursive call stack with explicit work stack
+const WorkItem = struct {
+    strings: []const []const u8,
+    depth: usize,
+    cache_key: u128,
+    state: WorkState,
+    /// Compatible atoms for this work item
+    compatible_atoms: ?[]Atom = null,
+    /// Current index into compatible_atoms
+    atom_index: usize = 0,
+    /// Atom being processed when waiting for child
+    pending_atom: ?Atom = null,
+    /// Suffixes passed to child (needs freeing)
+    pending_suffixes: ?[]const []const u8 = null,
+    /// Accumulated results for this work item
+    results: std.ArrayList(PatternList) = .{},
+    /// Count of patterns found
+    count: usize = 0,
+
+    fn deinit(self: *WorkItem, allocator: Allocator) void {
+        if (self.compatible_atoms) |ca| allocator.free(ca);
+        if (self.pending_suffixes) |ps| allocator.free(ps);
+        for (self.results.items) |*pattern| {
+            allocator.free(pattern.atoms);
+        }
+        self.results.deinit(allocator);
+    }
+};
+
+/// Result from a completed child work item
+const CompletedResult = struct {
+    patterns: std.ArrayList(PatternList),
+};
+
+/// Iterative pattern learning - eliminates stack overflow risk
+///
+/// This is a state-machine based reimplementation of learnPatternsRecursive
+/// that uses an explicit work stack instead of the call stack.
+fn learnPatternsIterative(
+    strings: []const []const u8,
+    atoms: []const Atom,
+    initial_depth: usize,
+    memo_cache: *std.AutoHashMap(u128, std.ArrayList(PatternList)),
+    allocator: Allocator,
+) std.mem.Allocator.Error!std.ArrayList(PatternList) {
+    // Edge case: depth already at limit
+    if (initial_depth >= MAX_PATTERN_LENGTH) {
+        return .{};
+    }
+
+    var work_stack: std.ArrayList(WorkItem) = .{};
+    defer {
+        // Clean up any remaining work items
+        for (work_stack.items) |*item| {
+            item.deinit(allocator);
+        }
+        work_stack.deinit(allocator);
+    }
+
+    var completed_results: std.ArrayList(CompletedResult) = .{};
+    defer {
+        for (completed_results.items) |*cr| {
+            for (cr.patterns.items) |*pattern| {
+                allocator.free(pattern.atoms);
+            }
+            cr.patterns.deinit(allocator);
+        }
+        completed_results.deinit(allocator);
+    }
+
+    // Push initial work item
+    try work_stack.append(allocator, .{
+        .strings = strings,
+        .depth = initial_depth,
+        .cache_key = hashCacheKey(strings, initial_depth),
+        .state = .init,
+    });
+
+    var iterations: usize = 0;
+
+    while (work_stack.items.len > 0) {
+        iterations += 1;
+        if (iterations > MAX_ITERATIONS) {
+            // Safety valve - return partial results
+            break;
+        }
+
+        var item = &work_stack.items[work_stack.items.len - 1];
+
+        switch (item.state) {
+            .init => {
+                // Check cache first
+                if (memo_cache.get(item.cache_key)) |cached| {
+                    // Return a copy of cached patterns
+                    for (cached.items) |pattern| {
+                        const atoms_copy = try allocator.dupe(Atom, pattern.atoms);
+                        try item.results.append(allocator, .{ .atoms = atoms_copy });
+                    }
+                    item.state = .finalizing;
+                    continue;
+                }
+
+                // Check depth limit
+                if (item.depth >= MAX_PATTERN_LENGTH) {
+                    item.state = .finalizing;
+                    continue;
+                }
+
+                // Get compatible atoms
+                item.compatible_atoms = try getCompatibleAtoms(item.strings, atoms, allocator);
+                item.state = .processing_atoms;
+            },
+
+            .processing_atoms => {
+                const compatible = item.compatible_atoms orelse {
+                    item.state = .finalizing;
+                    continue;
+                };
+
+                // Process atoms until recursion needed or done
+                while (item.atom_index < compatible.len and item.count < MAX_PATTERNS_EXPLORED) {
+                    const atom_val = compatible[item.atom_index];
+                    item.atom_index += 1;
+
+                    // Get suffixes after matching this atom
+                    const suffixes = try getSuffixesAfterAtom(item.strings, atom_val, allocator);
+
+                    // Check if all suffixes are empty
+                    var all_empty = true;
+                    for (suffixes) |s| {
+                        if (s.len > 0) {
+                            all_empty = false;
+                            break;
+                        }
+                    }
+
+                    if (all_empty) {
+                        // This atom completes the pattern
+                        allocator.free(suffixes);
+                        const pattern = try allocator.alloc(Atom, 1);
+                        pattern[0] = atom_val;
+                        try item.results.append(allocator, .{ .atoms = pattern });
+                        item.count += 1;
+                    } else if (item.depth + 1 < MAX_PATTERN_LENGTH) {
+                        // Need to recurse - push child work item
+                        item.pending_atom = atom_val;
+                        item.pending_suffixes = suffixes;
+                        item.state = .waiting_for_child;
+
+                        const child_depth = item.depth + 1;
+                        try work_stack.append(allocator, .{
+                            .strings = suffixes,
+                            .depth = child_depth,
+                            .cache_key = hashCacheKey(suffixes, child_depth),
+                            .state = .init,
+                        });
+                        break; // Let the child process first
+                    } else {
+                        // At depth limit, discard suffixes
+                        allocator.free(suffixes);
+                    }
+                }
+
+                // If we didn't push a child (no break), we're done processing atoms
+                if (item.state == .processing_atoms) {
+                    item.state = .finalizing;
+                }
+            },
+
+            .waiting_for_child => {
+                // Child completed - its results are in completed_results
+                if (completed_results.items.len > 0) {
+                    // Pop last item manually
+                    var child_result = completed_results.items[completed_results.items.len - 1];
+                    completed_results.items.len -= 1;
+
+                    const atom_val = item.pending_atom.?;
+
+                    // Prepend pending atom to each child pattern
+                    for (child_result.patterns.items) |suffix_pattern| {
+                        if (item.count >= MAX_PATTERNS_EXPLORED) break;
+
+                        const new_pattern = try allocator.alloc(Atom, suffix_pattern.atoms.len + 1);
+                        new_pattern[0] = atom_val;
+                        @memcpy(new_pattern[1..], suffix_pattern.atoms);
+                        try item.results.append(allocator, .{ .atoms = new_pattern });
+                        item.count += 1;
+                    }
+
+                    // Clean up child result
+                    for (child_result.patterns.items) |*pattern| {
+                        allocator.free(pattern.atoms);
+                    }
+                    child_result.patterns.deinit(allocator);
+
+                    // Free pending suffixes
+                    if (item.pending_suffixes) |ps| allocator.free(ps);
+                    item.pending_suffixes = null;
+                    item.pending_atom = null;
+
+                    // Continue processing remaining atoms
+                    item.state = .processing_atoms;
+                }
+            },
+
+            .finalizing => {
+                // Store in cache
+                var cache_copy: std.ArrayList(PatternList) = .{};
+                for (item.results.items) |pattern| {
+                    const atoms_copy = try allocator.dupe(Atom, pattern.atoms);
+                    try cache_copy.append(allocator, .{ .atoms = atoms_copy });
+                }
+                try memo_cache.put(item.cache_key, cache_copy);
+
+                // Clean up compatible_atoms
+                if (item.compatible_atoms) |ca| allocator.free(ca);
+                item.compatible_atoms = null;
+
+                // Pop this item from work stack (we know it exists from while condition)
+                const completed = work_stack.items[work_stack.items.len - 1];
+                work_stack.items.len -= 1;
+
+                if (work_stack.items.len == 0) {
+                    // This is the root - return results directly
+                    return completed.results;
+                } else {
+                    // Push results for parent to consume
+                    try completed_results.append(allocator, .{ .patterns = completed.results });
+                }
+            },
+        }
+    }
+
+    // Iteration limit reached or stack empty - return partial results
+    if (work_stack.items.len > 0) {
+        const last = work_stack.items[work_stack.items.len - 1];
+        work_stack.items.len -= 1;
+        // Clean up remaining items on stack
+        for (work_stack.items) |*remaining| {
+            remaining.deinit(allocator);
+        }
+        return last.results;
+    }
+
+    return .{};
+}
+
 /// Get the maximal set of atoms compatible with all strings
 ///
 /// Implements the GetMaxCompatibleAtoms algorithm from Figure 15 of the paper.
@@ -588,7 +863,8 @@ fn getConsistentWidth(
         if (width != first_width) return null;
     }
 
-    return @intCast(first_width);
+    // Safe cast from usize to u32 - returns null if width exceeds u32 max
+    return std.math.cast(u32, first_width);
 }
 
 /// Find common single-character delimiters that appear in all strings
@@ -736,7 +1012,7 @@ pub fn synthesizePatterns(
     const effective_depth = if (max_depth > MAX_PATTERN_LENGTH) MAX_PATTERN_LENGTH else max_depth;
     _ = effective_depth;
 
-    return try learnPatternsRecursive(strings, atoms, 0, &memo_cache, allocator);
+    return try learnPatternsIterative(strings, atoms, 0, &memo_cache, allocator);
 }
 
 // ============================================================================

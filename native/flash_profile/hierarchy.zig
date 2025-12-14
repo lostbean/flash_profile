@@ -352,8 +352,14 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
     // Next cluster ID for merged clusters
     var next_cluster_id: usize = n;
 
+    // Safety limit for AHC iterations (should complete in n-1 iterations normally)
+    const MAX_AHC_ITERATIONS: usize = 100_000;
+    var ahc_iterations: usize = 0;
+
     // Main AHC loop: merge until only one cluster remains
     while (clusters.items.len > 1) {
+        ahc_iterations += 1;
+        if (ahc_iterations > MAX_AHC_ITERATIONS) break; // Safety valve
         // Find pair with minimum complete-linkage distance from cache
         // If cache is empty (all remaining pairs have infinite dissimilarity),
         // use fallback to scan all pairs directly

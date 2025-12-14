@@ -123,11 +123,13 @@ defmodule FlashProfile.MixProject do
   defp aliases do
     [
       precommit: [
+        "clean",
         "format",
         "compile --warnings-as-errors",
         "test"
       ],
       ci: [
+        "clean",
         "format --check-formatted",
         "compile --warnings-as-errors",
         "test"

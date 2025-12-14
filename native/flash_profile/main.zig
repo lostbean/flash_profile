@@ -10,6 +10,7 @@ pub const dissimilarity = @import("dissimilarity.zig");
 pub const hierarchy = @import("hierarchy.zig");
 pub const profile = @import("profile.zig");
 pub const compress = @import("compress.zig");
+pub const validation = @import("validation.zig");
 
 // Re-export main types for convenience
 pub const Cost = types.Cost;
@@ -42,4 +43,5 @@ test {
     _ = hierarchy;
     _ = profile;
     _ = compress;
+    _ = validation;
 }

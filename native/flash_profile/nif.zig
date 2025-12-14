@@ -1,5 +1,8 @@
 // NIF entry point for FlashProfile Zig implementation
 // This file defines the public NIF functions exposed to Elixir via Zigler
+//
+// IMPORTANT: All NIF functions include input validation to prevent crashes.
+// Invalid inputs return {:error, reason} tuples instead of crashing.
 
 const std = @import("std");
 const beam = @import("beam");
@@ -12,6 +15,7 @@ const learner_mod = @import("learner.zig");
 const profile_mod = @import("profile.zig");
 const dissimilarity_mod = @import("dissimilarity.zig");
 const types = @import("types.zig");
+const validation = @import("validation.zig");
 
 const Atom = atom_mod.Atom;
 const Pattern = pattern_mod.Pattern;
@@ -52,6 +56,11 @@ const default_atoms = [_]Atom{
 /// Learn the best pattern for a list of strings.
 /// Returns: {:ok, {pattern_names, cost}} or {:error, reason}
 pub fn learn_pattern_nif(strings: []const []const u8) !beam.term {
+    // Validate input
+    if (validation.validateStrings(strings)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+
     var arena = std.heap.ArenaAllocator.init(beam.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -79,8 +88,12 @@ pub fn learn_pattern_nif(strings: []const []const u8) !beam.term {
 
 /// Check if a pattern matches a string.
 /// Pattern is specified as list of atom names.
-/// Returns: true | false
+/// Returns: true | false (returns false for invalid inputs)
 pub fn matches_nif(pattern_names: []const []const u8, string: []const u8) bool {
+    // Validate inputs (return false for invalid inputs)
+    if (validation.validatePatternNames(pattern_names) != null) return false;
+    if (validation.validateStringLength(string) != null) return false;
+
     var arena = std.heap.ArenaAllocator.init(beam.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -100,6 +113,14 @@ pub fn matches_nif(pattern_names: []const []const u8, string: []const u8) bool {
 /// Calculate the cost of a pattern over a dataset.
 /// Returns: {:ok, cost} or {:error, :no_match}
 pub fn calculate_cost_nif(pattern_names: []const []const u8, strings: []const []const u8) !beam.term {
+    // Validate inputs
+    if (validation.validatePatternNames(pattern_names)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateStrings(strings)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+
     var arena = std.heap.ArenaAllocator.init(beam.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -130,6 +151,20 @@ pub fn profile_nif(
     max_patterns: usize,
     theta: f64,
 ) !beam.term {
+    // Validate inputs
+    if (validation.validateStrings(strings)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateMinPatterns(min_patterns)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateMaxPatterns(max_patterns, min_patterns)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateTheta(theta)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+
     var arena = std.heap.ArenaAllocator.init(beam.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -158,6 +193,23 @@ pub fn big_profile_nif(
     theta: f64,
     mu: f64,
 ) !beam.term {
+    // Validate inputs
+    if (validation.validateStrings(strings)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateMinPatterns(min_patterns)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateMaxPatterns(max_patterns, min_patterns)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateTheta(theta)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateMu(mu)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+
     var arena = std.heap.ArenaAllocator.init(beam.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -181,6 +233,14 @@ pub fn big_profile_nif(
 /// Compute dissimilarity between two strings.
 /// Returns: {:ok, cost} or {:error, :no_pattern}
 pub fn dissimilarity_nif(string1: []const u8, string2: []const u8) !beam.term {
+    // Validate inputs
+    if (validation.validateStringLength(string1)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+    if (validation.validateStringLength(string2)) |err| {
+        return validation.makeErrorTerm(err);
+    }
+
     var arena = std.heap.ArenaAllocator.init(beam.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();

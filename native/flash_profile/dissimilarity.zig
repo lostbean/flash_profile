@@ -68,9 +68,10 @@ pub const DissimilarityMatrix = struct {
 
     /// Get dissimilarity value at position (i, j).
     /// Requires i < j (upper triangle).
+    /// Returns infinity for invalid indices instead of crashing.
     pub fn get(self: DissimilarityMatrix, i: usize, j: usize) f64 {
-        std.debug.assert(i < j);
-        std.debug.assert(j < self.n);
+        // Bounds check - return infinity for invalid indices instead of crashing
+        if (i >= j or j >= self.n) return std.math.inf(f64);
 
         const idx = self.getIndex(i, j);
         return self.values[idx];
@@ -78,9 +79,10 @@ pub const DissimilarityMatrix = struct {
 
     /// Set dissimilarity value at position (i, j).
     /// Requires i < j (upper triangle).
+    /// Silently ignores invalid indices instead of crashing.
     pub fn set(self: *DissimilarityMatrix, i: usize, j: usize, value: f64) void {
-        std.debug.assert(i < j);
-        std.debug.assert(j < self.n);
+        // Bounds check - silently ignore invalid indices instead of crashing
+        if (i >= j or j >= self.n) return;
 
         const idx = self.getIndex(i, j);
         self.values[idx] = value;

@@ -216,6 +216,7 @@ flash_profile/
 │   ├── learner.zig                # Pattern learning
 │   ├── hierarchy.zig              # Hierarchical clustering
 │   ├── profile.zig                # Profile/BigProfile algorithms
+│   ├── validation.zig             # Input validation & safety limits
 │   └── nif.zig                    # NIF interface
 ```
 

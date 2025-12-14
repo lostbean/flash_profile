@@ -114,6 +114,33 @@ defmodule FlashProfile do
   @type profile :: [ProfileEntry.t()]
   @type flash_atom :: Atom.t()
 
+  @typedoc """
+  Validation error reasons returned by the Zig NIF backend.
+
+  These errors are returned when input validation fails at the NIF boundary:
+  - `:too_many_strings` - Input exceeds maximum string count (100,000)
+  - `:string_too_long` - A string exceeds maximum length (100KB)
+  - `:total_size_exceeded` - Total input size exceeds limit (1GB)
+  - `:invalid_min_patterns` - `min_patterns` must be >= 1
+  - `:invalid_max_patterns` - `max_patterns` must be >= `min_patterns` and <= 1000
+  - `:invalid_theta` - `theta` must be > 0 and <= 100
+  - `:invalid_mu` - `mu` must be > 0 and <= 100
+  - `:pattern_too_long` - Pattern names array exceeds limit (100)
+  - `:invalid_number` - NaN or infinity in numeric parameter
+  - `:no_pattern` - No pattern could be learned for the input
+  """
+  @type validation_error ::
+          :too_many_strings
+          | :string_too_long
+          | :total_size_exceeded
+          | :invalid_min_patterns
+          | :invalid_max_patterns
+          | :invalid_theta
+          | :invalid_mu
+          | :pattern_too_long
+          | :invalid_number
+          | :no_pattern
+
   # Default options for profiling operations
   @default_opts [
     min_patterns: 1,
@@ -141,11 +168,22 @@ defmodule FlashProfile do
 
   ## Returns
 
-  List of `ProfileEntry` structs, sorted by cost (lowest first).
+  - `[ProfileEntry.t()]` - List of profile entries, sorted by cost (lowest first)
+  - `{:error, reason}` - Validation error (see `t:validation_error/0`)
+
   Each entry contains:
   - `data` - Strings matched by this pattern
   - `pattern` - Learned pattern (list of atoms)
   - `cost` - Pattern cost
+
+  ## Input Limits
+
+  - Maximum 100,000 strings
+  - Maximum 100KB per string
+  - Maximum 1GB total input size
+  - `min_patterns` must be >= 1
+  - `max_patterns` must be >= `min_patterns` and <= 1000
+  - `theta` must be > 0 and <= 100
 
   ## Examples
 
@@ -168,9 +206,13 @@ defmodule FlashProfile do
   iex> # Empty dataset
   iex> FlashProfile.profile([])
   []
+
+  iex> # Validation error: theta out of range
+  iex> FlashProfile.profile(["test"], theta: 0.0)
+  {:error, :invalid_theta}
   ```
   """
-  @spec profile([String.t()], keyword()) :: profile()
+  @spec profile([String.t()], keyword()) :: profile() | {:error, validation_error()}
   def profile(strings, opts \\ []) when is_list(strings) do
     # Merge options with defaults
     config = Keyword.merge(@default_opts, opts)
@@ -196,7 +238,8 @@ defmodule FlashProfile do
 
   ## Returns
 
-  List of `ProfileEntry` structs, sorted by cost.
+  - `[ProfileEntry.t()]` - List of profile entries, sorted by cost
+  - `{:error, reason}` - Validation error (see `t:validation_error/0`)
 
   ## Examples
 
@@ -211,7 +254,8 @@ defmodule FlashProfile do
   1
   ```
   """
-  @spec profile([String.t()], pos_integer(), pos_integer(), keyword()) :: profile()
+  @spec profile([String.t()], pos_integer(), pos_integer(), keyword()) ::
+          profile() | {:error, validation_error()}
   def profile(strings, min_patterns, max_patterns, opts \\ [])
       when is_list(strings) and is_integer(min_patterns) and min_patterns > 0 and
              is_integer(max_patterns) and max_patterns > 0 and min_patterns <= max_patterns do
@@ -223,9 +267,8 @@ defmodule FlashProfile do
       {:ok, entries} ->
         convert_nif_profile_entries(entries, strings)
 
-      {:error, _reason} ->
-        # Return empty profile on error
-        []
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -294,7 +337,18 @@ defmodule FlashProfile do
 
   ## Returns
 
-  List of `ProfileEntry` structs.
+  - `[ProfileEntry.t()]` - List of profile entries
+  - `{:error, reason}` - Validation error (see `t:validation_error/0`)
+
+  ## Input Limits
+
+  - Maximum 100,000 strings
+  - Maximum 100KB per string
+  - Maximum 1GB total input size
+  - `min_patterns` must be >= 1
+  - `max_patterns` must be >= `min_patterns` and <= 1000
+  - `theta` must be > 0 and <= 100
+  - `mu` must be > 0 and <= 100
 
   ## Examples
 
@@ -313,9 +367,13 @@ defmodule FlashProfile do
   iex> # Empty dataset
   iex> FlashProfile.big_profile([])
   []
+
+  iex> # Validation error: mu out of range
+  iex> FlashProfile.big_profile(["test"], mu: -1.0)
+  {:error, :invalid_mu}
   ```
   """
-  @spec big_profile([String.t()], keyword()) :: profile()
+  @spec big_profile([String.t()], keyword()) :: profile() | {:error, validation_error()}
   def big_profile(strings, opts \\ []) when is_list(strings) do
     config = Keyword.merge(@default_opts, opts)
     min_patterns = config[:min_patterns]
@@ -328,9 +386,8 @@ defmodule FlashProfile do
       {:ok, entries} ->
         convert_nif_profile_entries(entries, strings)
 
-      {:error, _reason} ->
-        # Return empty profile on error
-        []
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -348,7 +405,13 @@ defmodule FlashProfile do
   ## Returns
 
   - `{pattern, cost}` - The best pattern and its cost
-  - `{:error, :no_pattern}` - If no pattern can describe all strings
+  - `{:error, reason}` - Validation error (see `t:validation_error/0`)
+
+  ## Input Limits
+
+  - Maximum 100,000 strings
+  - Maximum 100KB per string
+  - Maximum 1GB total input size
 
   ## Examples
 
@@ -367,7 +430,8 @@ defmodule FlashProfile do
   {[], 0.0}
   ```
   """
-  @spec learn_pattern([String.t()], keyword()) :: {pattern(), float()} | {:error, :no_pattern}
+  @spec learn_pattern([String.t()], keyword()) ::
+          {pattern(), float()} | {:error, validation_error()}
   def learn_pattern(strings, _opts \\ []) when is_list(strings) do
     # Use NIF implementation
     case FlashProfile.Native.learn_pattern_nif(strings) do
@@ -395,8 +459,13 @@ defmodule FlashProfile do
   ## Returns
 
   - `0.0` - If strings are identical
-  - `:infinity` - If no pattern can describe both
+  - `:infinity` - If no pattern can describe both (`:no_pattern` error)
   - `float()` - Cost of best pattern for both strings
+  - `{:error, reason}` - Validation error (see `t:validation_error/0`)
+
+  ## Input Limits
+
+  - Maximum 100KB per string
 
   ## Examples
 
@@ -416,7 +485,8 @@ defmodule FlashProfile do
   true
   ```
   """
-  @spec dissimilarity(String.t(), String.t(), keyword()) :: float() | :infinity
+  @spec dissimilarity(String.t(), String.t(), keyword()) ::
+          float() | :infinity | {:error, validation_error()}
   def dissimilarity(string1, string2, _opts \\ [])
       when is_binary(string1) and is_binary(string2) do
     # Use NIF implementation
@@ -424,8 +494,11 @@ defmodule FlashProfile do
       {:ok, cost} ->
         cost
 
-      {:error, _reason} ->
+      {:error, :no_pattern} ->
         :infinity
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
