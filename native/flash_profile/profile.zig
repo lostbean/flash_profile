@@ -98,6 +98,49 @@ pub fn profile(
         };
     }
 
+    // Edge case: all strings are identical
+    // Check if all strings are the same as the first string
+    //
+    // TODO: A more general optimization would be to deduplicate strings upfront:
+    // 1. Create a unique set of strings, tracking which original indices map to each
+    // 2. Profile only the unique strings (more efficient for datasets with many duplicates)
+    // 3. Expand results back to all original indices
+    // This would handle any level of duplication, not just the "all identical" case.
+    // The cost function weights (Section 4.3 of FlashProfile paper) would need to account
+    // for the count of each unique string when computing pattern costs.
+    if (strings.len > 1) {
+        var all_identical = true;
+        const first = strings[0];
+        for (strings[1..]) |s| {
+            if (!std.mem.eql(u8, first, s)) {
+                all_identical = false;
+                break;
+            }
+        }
+
+        if (all_identical) {
+            // All strings are identical - return single cluster with all indices
+            const pattern = try allocator.alloc(Atom, 0); // Empty pattern
+            const indices = try allocator.alloc(usize, strings.len);
+            for (0..strings.len) |i| {
+                indices[i] = i;
+            }
+
+            const entries = try allocator.alloc(ProfileEntry, 1);
+            entries[0] = .{
+                .pattern = pattern,
+                .cost = 0.0,
+                .data_indices = indices,
+                .allocator = allocator,
+            };
+
+            return ProfileResult{
+                .entries = entries,
+                .allocator = allocator,
+            };
+        }
+    }
+
     // Build hierarchy using dissimilarity matrix
     var hierarchy = try buildHierarchy(strings, atoms, options, allocator);
     defer hierarchy.deinit();
@@ -643,6 +686,12 @@ fn checkHomogeneity(
             all_similar = false;
             break;
         }
+    }
+
+    // Special case: if cost is 0.0 and pattern is null, strings are identical
+    // This IS homogeneous (all strings are the same)
+    if (first_cost == 0.0 and patterns[0] == null) {
+        return HomogeneityResult{ .is_homogeneous = true, .uniform_dissim = 0.0 };
     }
 
     if (!all_similar or patterns[0] == null) {
