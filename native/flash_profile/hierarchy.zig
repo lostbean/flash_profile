@@ -355,11 +355,20 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
     // Main AHC loop: merge until only one cluster remains
     while (clusters.items.len > 1) {
         // Find pair with minimum complete-linkage distance from cache
-        const min_pair = cache.findMin() orelse return error.NoValidMerge;
+        // If cache is empty (all remaining pairs have infinite dissimilarity),
+        // use fallback to scan all pairs directly
+        const min_result: MinLinkageResult = if (cache.findMin()) |cached_pair|
+            MinLinkageResult{
+                .idx_x = cluster_id_to_idx.get(cached_pair.i) orelse return error.ClusterNotFound,
+                .idx_y = cluster_id_to_idx.get(cached_pair.j) orelse return error.ClusterNotFound,
+                .linkage = cached_pair.linkage,
+            }
+        else
+            try findMinLinkagePair(clusters.items, matrix, allocator);
 
-        // Map cluster IDs back to indices
-        const idx_x = cluster_id_to_idx.get(min_pair.i) orelse return error.ClusterNotFound;
-        const idx_y = cluster_id_to_idx.get(min_pair.j) orelse return error.ClusterNotFound;
+        const idx_x = min_result.idx_x;
+        const idx_y = min_result.idx_y;
+        const merge_height = min_result.linkage;
 
         // Get the two clusters to merge
         const cluster_x = clusters.items[idx_x];
@@ -371,7 +380,7 @@ pub fn ahc(matrix: *const DissimilarityMatrix, allocator: Allocator) !Hierarchy 
             .internal = .{
                 .left = cluster_x.node,
                 .right = cluster_y.node,
-                .height = min_pair.linkage,
+                .height = merge_height,
             },
         };
 

@@ -34,7 +34,10 @@
       "Bash(git describe:*)",
       "Bash(git rev-parse:*)",
       "Bash(mix docs:*)",
-      "Bash(mix ci:*)"
+      "Bash(mix ci:*)",
+      "Bash(iex -S mix:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
