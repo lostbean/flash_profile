@@ -233,6 +233,13 @@ pub fn profile(
         return compressed_result;
     }
 
+    // Sort entries by cost (ascending) before returning
+    std.sort.heap(ProfileEntry, deduped_entries, {}, struct {
+        fn lessThan(_: void, a: ProfileEntry, b: ProfileEntry) bool {
+            return a.cost < b.cost;
+        }
+    }.lessThan);
+
     return ProfileResult{
         .entries = deduped_entries,
         .allocator = allocator,
@@ -381,12 +388,26 @@ pub fn bigProfile(
         }
         allocator.free(deduped_entries);
 
+        // Sort compressed entries by cost (ascending) before returning
+        std.sort.heap(ProfileEntry, compressed, {}, struct {
+            fn lessThan(_: void, a: ProfileEntry, b: ProfileEntry) bool {
+                return a.cost < b.cost;
+            }
+        }.lessThan);
+
         // Replace with compressed
         return ProfileResult{
             .entries = compressed,
             .allocator = allocator,
         };
     }
+
+    // Sort entries by cost (ascending) before returning
+    std.sort.heap(ProfileEntry, deduped_entries, {}, struct {
+        fn lessThan(_: void, a: ProfileEntry, b: ProfileEntry) bool {
+            return a.cost < b.cost;
+        }
+    }.lessThan);
 
     return ProfileResult{
         .entries = deduped_entries,

@@ -131,6 +131,13 @@ pub fn compressProfile(
     // Clear working list without freeing (ownership transferred)
     working.clearRetainingCapacity();
 
+    // Sort entries by cost (ascending) before returning
+    std.sort.heap(ProfileEntry, result_entries, {}, struct {
+        fn lessThan(_: void, a: ProfileEntry, b: ProfileEntry) bool {
+            return a.cost < b.cost;
+        }
+    }.lessThan);
+
     return ProfileResult{
         .entries = result_entries,
         .allocator = allocator,
