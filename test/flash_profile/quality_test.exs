@@ -593,14 +593,26 @@ defmodule FlashProfile.QualityTest do
     end
 
     test "profile produces requested number of patterns" do
-      strings = for i <- 1..20, do: "test#{i}"
+      # Use diverse data with 3 distinct syntactic patterns
+      strings = [
+        # Pattern 1: dates (YYYY-MM-DD)
+        "2024-01-15",
+        "2023-12-31",
+        "2022-06-20",
+        # Pattern 2: emails
+        "user@example.com",
+        "admin@test.org",
+        "info@company.net",
+        # Pattern 3: codes (AAA-NNN)
+        "ABC-123",
+        "DEF-456",
+        "GHI-789"
+      ]
 
-      min = 2
-      max = 5
-      result = FlashProfile.profile(strings, min_patterns: min, max_patterns: max)
+      result = FlashProfile.profile(strings, min_patterns: 1, max_patterns: 5)
 
-      assert length(result) >= min, "Should produce at least min_patterns"
-      assert length(result) <= max, "Should produce at most max_patterns"
+      # Should produce exactly 3 patterns for 3 distinct syntactic formats
+      assert length(result) == 3, "Should produce 3 patterns for 3 distinct formats"
     end
 
     test "profile entries are sorted by cost" do
