@@ -11,7 +11,7 @@ const Cost = types.Cost;
 /// Performance limits to prevent exponential blowup
 /// From the FlashProfile implementation
 pub const MAX_PATTERN_LENGTH: usize = 15;
-pub const MAX_PATTERNS_EXPLORED: usize = 5000;
+pub const MAX_PATTERNS_EXPLORED: usize = 200;
 
 /// Safety limit for iterative pattern learning to prevent unbounded execution
 pub const MAX_ITERATIONS: usize = 1_000_000;
